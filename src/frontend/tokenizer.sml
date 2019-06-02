@@ -1,0 +1,155 @@
+structure Tokenizer : 
+sig
+  datatype token =
+    Identifier of string
+  | Integer of int
+  | KWInt
+  | ForAll
+  | Pi
+  | Sigma
+  | Val
+  | Let
+  | In
+  | End
+  | Fun
+  | Fn
+  | If
+  | Then
+  | Else
+  | LPar
+  | RPar
+  | Plus
+  | Dash
+  | Star
+  | Slash
+  | Equal
+  | NotEqual
+  | Less
+  | Greater
+  | LessEq
+  | GreaterEq
+  | RightArrow
+  | RightDashArrow
+  | Colon
+  | EOI
+  val whitespace : unit -> char list CParser.Parser
+  val word : unit -> token CParser.Parser
+  val integer : unit -> token CParser.Parser
+  val lpar : unit -> token CParser.Parser
+  val rpar : unit -> token CParser.Parser
+  val sym : unit -> token CParser.Parser
+  val tok : unit -> token CParser.Parser
+  val tokenize : char Stream.stream -> token vector
+end
+=
+struct
+  datatype token =
+    Identifier of string
+  | Integer of int
+  | KWInt
+  | ForAll
+  | Pi
+  | Sigma
+  | Val
+  | Let
+  | In
+  | End
+  | Fun
+  | Fn
+  | If
+  | Then
+  | Else
+  | LPar
+  | RPar
+  | Plus
+  | Dash
+  | Star
+  | Slash
+  | Equal
+  | NotEqual
+  | Less
+  | Greater
+  | LessEq
+  | GreaterEq
+  | RightArrow
+  | RightDashArrow
+  | Colon
+  | EOI
+
+  open CParser
+
+  fun whitespace () : char list Parser =
+    many (CharParser.space ())
+
+  fun word () : token Parser =
+    CharParser.letter () >>= (fn (x : char) =>
+    many (CharParser.alphanum ()) >>= (fn y =>
+      case (String.implode (x::y)) of
+        "forall" => return ForAll
+      | "pi" => return Pi
+      | "sigma" => return Sigma
+      | "val" => return Val
+      | "let" => return Let
+      | "in" => return In
+      | "end" => return End
+      | "fun" => return Fun
+      | "fn" => return Fn
+      | "if" => return If
+      | "then" => return Then
+      | "else" => return Else
+      | "int" => return KWInt
+      | _ => return (Identifier (String.implode (x::y)))
+    ))
+
+  fun integer () : token Parser =
+    many1 (CharParser.digit ()) >>= (fn x =>
+      return (Integer (Option.valOf (Int.fromString (String.implode x))))
+    )
+
+  fun lpar () : token Parser =
+    CharParser.lpar () >>= (fn x =>
+      return LPar
+    )
+
+  fun rpar () : token Parser =
+    CharParser.rpar () >>= (fn x =>
+      return RPar
+    )
+
+  fun sym () : token Parser =
+    many1 (CharParser.symbol ()) >>= (fn x =>
+      (case String.implode x of
+        "+" => return Plus
+      | "-" => return Dash
+      | "*" => return Star
+      | "/" => return Slash
+      | "=" => return Equal
+      | "<>" => return NotEqual
+      | "<" => return Less
+      | ">" => return Greater
+      | "<=" => return LessEq
+      | ">=" => return GreaterEq
+      | "=>" => return RightArrow
+      | "->" => return RightDashArrow
+      | ":" => return Colon
+      | _ => raise Fail ("not symbol: " ^ (String.implode x))
+    ))
+
+  fun tok () : token Parser =
+    (word ()
+    ++ integer ()
+    ++ lpar ()
+    ++ rpar ()
+    ++ sym ())
+    >>= (fn x =>
+    whitespace () >>= (fn _ =>
+      return x
+    ))
+
+  fun tokenize (s : char Stream.stream) : token vector =
+    case many (tok ()) s of
+      Ok (x, xs) => Vector.fromList (x @ [EOI])
+    | Error _ => Vector.fromList []
+
+end
+
