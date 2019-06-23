@@ -1,10 +1,12 @@
 structure PTS : sig
-  type vname
-  type tyname
+
+  datatype var =
+    Var of int
+  | Anonymous
 
   datatype sort =
-    ProperTypes
-  | Kinds
+    Kind
+  | ProperType
   | IntSort
   | BoolSort
 
@@ -17,43 +19,50 @@ structure PTS : sig
   type spec = sorts * axioms * rules
 
   datatype Lit =
-    IntType
-  | IntLit of int
+    IntLit of int
+  | BoolLit of bool
 
   datatype term =
     Sort of sort
-  | Variable of vname * term
+  | Variable of int
   | Literal of Lit
-  | Abs of vname * term * term
+  | Abs of term * term
   | App of term * term
-  | DepProd of vname * term * term
+  | DepProd of term * term
+  | LetTerm of term * term * term
+  | DepSum of term * term
+  | DepPair of term * term * term
+  | Fst of term
+  | Snd of term
   | Unknown
 
-  val minus : spec -> sort option -> sort option
-  val plus : spec -> sort option -> sort option
+  type env = term list
+  type defs = (int * term, term) AssocList.asl
+
   val rho : spec -> (sort option * sort option) -> sort option
-  val mu : spec -> (sort option * sort option) -> sort option
-  val sort : spec -> (vname, term) AssocList.asl -> term option -> sort option
-  val elmt : spec -> (vname, term) AssocList.asl -> term option -> sort option
-  val freevars : term -> vname Set.set
-  val weaksubst : (vname * term) -> term -> term
-  val strongsubst : (vname * term) -> term -> term
-  val whstep : term -> term option
-  val whreduce : term -> term
-  val nfstep : term -> term option
-  val nfreduce : term -> term
-  val evalstep : term -> term option
-  val eval : term -> term
+
+  val update : int -> int -> term -> term
+  val subst : int -> term -> term -> term
+  val whstep : defs -> term -> term option
+  val whreduce : defs -> term -> term
+  val nfstep : defs -> term -> term option
+  val nfreduce : defs -> term -> term
+
 end
 =
 struct
   open OptionMonad
-  type vname = string
-  type tyname = string
+
+  datatype var =
+    Var of int
+  | Anonymous
 
   datatype sort =
-    ProperTypes
-  | Kinds
+    Kind
+  | ProperType
+  | IntSort
+  | BoolSort
+
   type sorts = sort list
   type axiom = sort * sort
   type axioms = axiom list
@@ -63,192 +72,155 @@ struct
   type spec = sorts * axioms * rules
 
   datatype Lit =
-    IntType
-  | IntLit of int
+    IntLit of int
+  | BoolLit of bool
 
   datatype term =
     Sort of sort
-  | Variable of vname * term
+  | Variable of int
   | Literal of Lit
-  | Abs of vname * term * term
+  | Abs of term * term
   | App of term * term
-  | DepProd of vname * term * term
+  | DepProd of term * term
+  | LetTerm of term * term * term
+  | DepSum of term * term
+  | DepPair of term * term * term
+  | Fst of term
+  | Snd of term
   | Unknown
 
-  fun minus sp s =
-    case s of
-      SOME t =>
-        (case List.find (fn x => #2 x = t) (#2 sp) of
-          SOME pair => SOME (#1 pair)
-        | NONE => NONE
-        )
-    | NONE => NONE
-
-  fun plus sp s =
-    case s of
-      SOME t =>
-        (case List.find (fn x => #1 x = t) (#2 sp) of
-          SOME pair => SOME (#2 pair)
-        | NONE => NONE
-        )
-    | NONE => NONE
+  type env = term list
+  type defs = (int * term, term) AssocList.asl
 
   fun rho sp (SOME t1, SOME t2) =
     (case List.find (fn x => #1 x = t1 andalso #2 x = t2) (#3 sp) of
       SOME triple => SOME (#3 triple)
-    | NONE => NONE
-    )
+    | NONE => NONE)
   | rho sp (SOME t1, NONE) = NONE
   | rho sp (NONE, SOME t2) = NONE
   | rho sp (NONE, NONE) = NONE
 
-  fun mu sp (SOME t1, SOME t2) =
-    (case List.find (fn x => (#1 x) = t1 andalso (#3 x) = t2) (#3 sp) of
-      SOME triple => SOME (#2 triple)
-    | NONE => NONE
-    )
-  | mu sp (SOME t1, NONE) = NONE
-  | mu sp (NONE, SOME t2) = NONE
-  | mu sp (NONE, NONE) = NONE
+  fun update k i t =
+    case t of
+      Sort _ => t
+    | Variable (n) =>
+        if n > k then Variable (n + i - 1)
+        else Variable (n)
+    | Literal _ => t
+    | Abs (t1, t2) => 
+        Abs (update k i t1, update (k + 1) i t2)
+    | App (t1, t2) => 
+        App (update k i t1, update k i t2)
+    | DepProd (t1, t2) => 
+        DepProd (update k i t1, update (k + 1) i t2)
+    | LetTerm (t1, t2, t3) => 
+        LetTerm (update k i t1, update k i t2, update (k + 1) i t3)
+    | DepSum (t1, t2) => DepSum (update k i t1, update (k + 1) i t2)
+    | DepPair (t1, t2, t3) => DepPair (update k i t1, update k i t2, update k i t3)
+    | Fst (t1) => Fst (update k i t1)
+    | Snd (t1) => Snd (update k i t1)
+    | Unknown => t
 
-  fun sort sp env t =
-    (case t of
-      SOME t' => 
-        (case t' of
-          Unknown => NONE
-        | (Variable (v, t1)) => minus sp (elmt sp env (SOME (Variable (v, t1))))
-        | (Literal l) =>
-            (case l of
-              IntType => SOME ProperTypes
-            | IntLit i => SOME IntSort
-            )
-        | (Sort s) => plus sp (SOME s)
-        | (App (t1, t2)) => minus sp (elmt sp env (SOME (App (t1, t2))))
-        | (Abs (v, t1, t2)) => minus sp (elmt sp env (SOME (Abs (v, t1, t2))))
-        | (DepProd (v, t1, t2)) => 
-            rho sp (sort sp env (SOME t1), elmt sp (AssocList.insert (v, t1) env) (SOME t2))
-        )
-    | NONE => NONE)
-  and elmt sp env t =
-    (case t of
-      SOME t' => 
-        (case t' of
-          Unknown => NONE
-        | (Variable (v, t1)) => sort sp env (SOME t1)
-        | (Literal l) =>
-            (case l of
-              IntType => SOME Kinds
-            | IntLit i => SOME ProperTypes
-            )
-        | (Sort s) => plus sp (plus sp (SOME s))
-        | (App (t1, t2)) => mu sp (elmt sp env (SOME t1), elmt sp env (SOME t2))
-        | (Abs (v, t1, t2)) => 
-            rho sp (sort sp env (SOME t1), elmt sp (AssocList.insert (v, t1) env) (SOME t2))
-        | (DepProd (v, t1, t2)) => plus sp (sort sp env (SOME (DepProd (v, t1, t2))))
-        )
-    | NONE => NONE)
+  fun subst i s t =
+    case t of
+      Sort _ => t
+    | Variable (n) =>
+        if n > i then Variable (n - 1)
+        else if n = i then update 0 i s
+        else Variable (n)
+    | Literal _ => t
+    | Abs (t1, t2) => 
+        Abs (subst i s t1, subst (i + 1) s t2)
+    | App (t1, t2) => 
+        App (subst i s t1, subst i s t1)
+    | DepProd (t1, t2) => 
+        DepProd (subst i s t1, subst (i + 1) s t2)
+    | LetTerm (t1, t2, t3) => 
+        LetTerm (subst i s t1, subst i s t2, subst (i + 1) s t3)
+    | DepSum (t1, t2) => DepSum (subst i s t1, subst i s t2)
+    | DepPair (t1, t2, t3) => DepPair (subst i s t1, subst i s t2, subst i s t3)
+    | Fst (t1) => Fst (subst i s t1)
+    | Snd (t1) => Snd (subst i s t1)
+    | Unknown => t
 
-  fun weaksubst (x, y) Unknown = Unknown
-  | weaksubst (x, y) (Variable (v, t1)) = 
-      if v = x then y else Variable (v, weaksubst (x, y) t1)
-  | weaksubst (x, y) (Literal l) = Literal l
-  | weaksubst (x, y) (Sort s) = (Sort s)
-  | weaksubst (x, y) (App (t1, t2)) = App (weaksubst (x, y) t1, weaksubst (x, y) t2)
-  | weaksubst (x, y) (Abs (v, t1, t2)) = 
-      if v = x then Abs (v, t1, t2) else Abs (v, weaksubst (x, y) t1, weaksubst (x, y) t2)
-  | weaksubst (x, y) (DepProd (v, t1, t2)) =
-      if v = x then DepProd (v, t1, t2) else DepProd (v, weaksubst (x, y) t1, weaksubst (x, y) t2)
-
-  fun freevars (Unknown) = Set.emptyset
-  | freevars (Variable (v, t1)) = Set.union [v] (freevars t1)
-  | freevars (Sort s) = Set.emptyset
-  | freevars (Literal l) = Set.emptyset
-  | freevars (App (t1, t2)) = Set.union (freevars t1) (freevars t2)
-  | freevars (Abs (v, t1, t2)) = 
-      Set.remove v (Set.union (freevars t1) (freevars t2))
-  | freevars (DepProd (v, t1, t2)) =
-      Set.remove v (Set.union (freevars t1) (freevars t2))
-
-  fun strongsubst (x, y) Unknown = Unknown
-  | strongsubst (x, y) (Variable (v, t1)) = 
-      if v = x then y else Variable (v, strongsubst (x, y) t1)
-  | strongsubst (x, y) (Literal l) = Literal l
-  | strongsubst (x, y) (Sort s) = (Sort s)
-  | strongsubst (x, y) (App (t1, t2)) = App (strongsubst (x, y) t1, strongsubst (x, y) t2)
-  | strongsubst (x, y) (Abs (v, t1, t2)) = 
-      if v = x then Abs (v, t1, t2) else Abs (v, strongsubst (x, y) t1, strongsubst (x, y) t2)
-  | strongsubst (x, y) (DepProd (v, t1, t2)) =
-      if v = x then DepProd (v, t1, t2) else DepProd (v, strongsubst (x, y) t1, strongsubst (x, y) t2)
-
-  fun whstep Unknown = zero
-  | whstep (Variable (v, t1)) = zero
-  | whstep (Sort s) = zero
-  | whstep (Literal l) = zero
-  | whstep (App (Abs (v, t1, t2), t3)) = 
-      return (weaksubst (v, t3) t2)
-  | whstep (App (t1, t2)) = 
-      (case whstep t1 of
-        SOME t1' => whstep (App (t1', t2)) ++ return (App (t1', t2))
+  fun whstep delta Unknown = zero
+  | whstep delta (Variable (n)) = zero
+  | whstep delta (Sort _) = zero
+  | whstep delta (Literal _) = zero
+  | whstep delta (App (Abs (t1, t2), t3)) = 
+      return (subst 1 t3 t2)
+  | whstep delta (App (t1, t2)) = 
+      (case whstep delta t1 of
+        SOME t1' => whstep delta (App (t1', t2)) ++ return (App (t1', t2))
       | NONE => zero)
-  | whstep (Abs (v, t1, t2)) = zero
-  | whstep (DepProd (v, t1, t2)) = zero
+  | whstep delta (Abs (t1, t2)) = zero
+  | whstep delta (DepProd (t1, t2)) = zero
+  | whstep delta (LetTerm (t1, t2, t3)) = 
+      return (subst 1 t3 t2)
+  | whstep delta (DepSum (t1, t2)) = zero
+  | whstep delta (DepPair (t1, t2, t3)) = zero
+  | whstep delta (Fst (t1)) = 
+      (case whstep delta t1 of
+        SOME (DepPair (t2, t3, t4)) => return t2
+      | SOME t1' => whstep delta (Fst (t1')) ++ return (Fst (t1'))
+      | NONE => zero)
+  | whstep delta (Snd (t1)) = 
+      (case whstep delta t1 of
+        SOME (DepPair (t2, t3, t4)) => return t3
+      | SOME t1' => whstep delta (Snd (t1')) ++ return (Snd (t1'))
+      | NONE => zero)
 
-  fun whreduce x =
-    case whstep x of
-      SOME x' => whreduce x'
+  fun whreduce delta x =
+    case whstep delta x of
+      SOME x' => whreduce delta x'
     | NONE => x
 
-  fun nfstep Unknown = zero
-  | nfstep (Variable (v, t1)) = zero
-  | nfstep (Sort s) = zero
-  | nfstep (Literal l) = zero
-  | nfstep (App (Abs (v, t1, t2), t3)) =
-      let val a' = strongsubst (v, t3) t2
+  fun nfstep delta Unknown = zero
+  | nfstep delta (Variable (n)) = zero
+  | nfstep delta (Sort s) = zero
+  | nfstep delta (Literal l) = zero
+  | nfstep delta (App (Abs (t1, t2), t3)) =
+      let val t2' = subst 1 t3 t2
       in
-        nfstep a' ++ return a'
+        nfstep delta t2' ++ return t2'
       end
-  | nfstep (App (t1, t2)) =
-      nfstep t1 >>= (fn t1' =>
-        nfstep (App (t1', t2)) ++ return (App (t1', t2))
+  | nfstep delta (App (t1, t2)) =
+      nfstep delta t1 >>= (fn t1' =>
+        nfstep delta (App (t1', t2)) ++ return (App (t1', t2))
       )
-      ++ nfstep t2 >>= (fn t2' =>
-        nfstep (App (t1, t2')) ++ return (App (t1, t2'))
+      ++ nfstep delta t2 >>= (fn t2' =>
+        nfstep delta (App (t1, t2')) ++ return (App (t1, t2'))
       )
       ++ zero
-  | nfstep (Abs (v, t1, t2)) = 
-      (case (nfstep t1, nfstep t2) of
+  | nfstep delta (Abs (t1, t2)) = 
+      (case (nfstep delta t1, nfstep delta t2) of
         (NONE, NONE) => zero
-      | (SOME t1', NONE) => return (Abs (v, t1', t2))
-      | (NONE, SOME t2') => return (Abs (v, t1, t2'))
-      | (SOME t1', SOME t2') => return (Abs (v, t1', t2'))
+      | (SOME t1', NONE) => return (Abs (t1', t2))
+      | (NONE, SOME t2') => return (Abs (t1, t2'))
+      | (SOME t1', SOME t2') => return (Abs (t1', t2'))
       )
-  | nfstep (DepProd (v, t1, t2)) = zero
+  | nfstep delta (DepProd (t1, t2)) = zero
+  | nfstep delta (LetTerm (t1, t2, t3)) =
+      let val t3' = subst 1 t2 t3
+      in
+        nfstep delta t3' ++ return t3'
+      end
+  | nfstep delta (DepSum (t1, t2)) = zero
+  | nfstep delta (DepPair (t1, t2, t3)) = zero
+  | nfstep delta (Fst (t1)) = 
+      (case nfstep delta t1 of
+        SOME (DepPair (t2, t3, t4)) => return t2
+      | SOME t1' => nfstep delta (Fst (t1')) ++ return (Fst (t1'))
+      | NONE => zero)
+  | nfstep delta (Snd (t1)) = 
+      (case nfstep delta t1 of
+        SOME (DepPair (t2, t3, t4)) => return t3
+      | SOME t1' => nfstep delta (Snd (t1')) ++ return (Snd (t1'))
+      | NONE => zero)
 
-  fun nfreduce x =
-    case nfstep x of
-      SOME x' => nfreduce x'
-    | NONE => x
-
-  fun evalstep Unknown = zero
-  | evalstep (Variable (v, t1)) = zero
-  | evalstep (Sort s) = zero
-  | evalstep (Literal l) = zero
-  | evalstep (App (Abs (v, t1, t2), t3)) =
-      return (weaksubst (v, t3) t2)
-  | evalstep (App (t1, t2)) =
-      evalstep t1 >>= (fn t1' =>
-        evalstep (App (t1', t2)) ++ return (App (t1', t2))
-      )
-      ++ evalstep t2 >>= (fn t2' =>
-        evalstep (App (t1, t2')) ++ return (App (t1, t2'))
-      )
-      ++ zero
-  | evalstep (Abs (v, t1, t2)) = zero
-  | evalstep (DepProd (v, t1, t2)) = zero
-
-  fun eval x =
-    case evalstep x of
-      SOME x' => eval x'
+  fun nfreduce delta x =
+    case nfstep delta x of
+      SOME x' => nfreduce delta x'
     | NONE => x
 
 end

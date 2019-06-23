@@ -15,13 +15,20 @@ fun main() =
 let
   val _ = PolyML.print_depth 100
   val seq = "fn x : int => x + 1"
-  val s = [ProperTypes, Kinds]
-  val ax = [(ProperTypes, Kinds)]
-  val rl = [(ProperTypes, ProperTypes, ProperTypes)]
+  val s = [IntSort, BoolSort, ProperType, Kind]
+  val ax = [(IntSort, ProperType), (BoolSort, ProperType), (ProperType, Kind)]
+  val rl = [
+    (* (IntSort, IntSort, IntSort),
+    (BoolSort, IntSort, IntSort),
+    (IntSort, BoolSort, BoolSort),
+    (BoolSort, BoolSort, BoolSort), *)
+    (ProperType, ProperType, ProperType)
+           ]
   val sp = (s, ax, rl)
-  val prog1 = Abs ("x", Literal IntType, Variable ("x", Literal IntType))
-  val prog2 = Sort ProperTypes
-  val t = TypeCheck.check sp [] prog1 { pairs = [], errs = [] }
+  val prog1 = Abs (Sort IntSort, Variable (1))
+  val prog2 = 
+    App (Abs (Sort IntSort, Variable (1)), Literal (IntLit 5))
+  val t = TypeCheck.check_nat sp [] prog2 { deltas = [], errs = [] }
   val _ = PolyML.print t
   val filename = List.nth (CommandLine.arguments (), 0)
   val contents = TextIO.input (TextIO.openIn filename)

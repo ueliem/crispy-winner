@@ -59,6 +59,9 @@ struct
   fun colon () = 
     satisfies (fn x => x = Tokenizer.Colon)
 
+  fun comma () = 
+    satisfies (fn x => x = Tokenizer.Comma)
+
   fun ident () =
     satisfies (fn x => case x of Tokenizer.Identifier _ => true
     | _ => false) >>= (fn x => case x of Tokenizer.Identifier i => return i
@@ -74,11 +77,10 @@ struct
     ++ abstraction ()
     ++ depprod ()
     ++ depsum ()
-    (* letterm
-    * pair
-    * fst
-    * snd
-    * fntype *)
+    ++ letterm ()
+    ++ pair ()
+    ++ fst ()
+    ++ snd ()
     ++ variable ()
     ++ literal () 
   and term () =
@@ -97,17 +99,44 @@ struct
     term () >>= (fn y =>
       return (Syntax.Variable (Syntax.Var x, y))
     )))
+  and pair () = 
+    lpar () >>= (fn _ =>
+    term () >>= (fn x =>
+    comma () >>= (fn _ =>
+    term () >>= (fn y =>
+    rpar () >>= (fn _ =>
+      return (Syntax.Pair (x, y))
+    )))))
+  and fst () = 
+    keyword (Tokenizer.First) >>= (fn _ =>
+    term () >>= (fn x =>
+      return (Syntax.Fst x)
+    ))
+  and snd () = 
+    keyword (Tokenizer.Second) >>= (fn _ =>
+    term () >>= (fn x =>
+      return (Syntax.Snd x)
+    ))
   and literal () = 
     integer () >>= (fn i =>
       return (Syntax.Literal (Syntax.IntLit i))
     ) ++
     keyword (Tokenizer.KWInt) >>= (fn _ =>
       return (Syntax.Literal (Syntax.IntType))
+    ) ++
+    keyword (Tokenizer.KWBool) >>= (fn _ =>
+      return (Syntax.Literal (Syntax.BoolType))
+    ) ++
+    keyword (Tokenizer.True) >>= (fn _ =>
+      return (Syntax.Literal (Syntax.BoolLit true))
+    ) ++
+    keyword (Tokenizer.False) >>= (fn _ =>
+      return (Syntax.Literal (Syntax.BoolLit false))
     )
   and application () =
     atom () >>= (fn x =>
-    atom () >>= (fn y =>
-      return (Syntax.App (x, y))
+    many (atom ()) >>= (fn apps =>
+      return (foldl (fn (t, s) => Syntax.App (t, s)) x apps)
     ))
   and abstraction () =
     keyword (Tokenizer.Fn) >>= (fn _ =>
@@ -136,6 +165,18 @@ struct
     term () >>= (fn e =>
       return (Syntax.DepSum (Syntax.Var x, y, e))
     ))))))
+  and letterm () =
+    keyword (Tokenizer.Let) >>= (fn _ =>
+    ident () >>= (fn x =>
+    colon () >>= (fn _ =>
+    term () >>= (fn y =>
+    equal () >>= (fn _ =>
+    term () >>= (fn z =>
+    keyword (Tokenizer.In) >>= (fn _ =>
+    term () >>= (fn w =>
+    keyword (Tokenizer.End) >>= (fn _ =>
+      return (Syntax.LetTerm (Syntax.Var x, y, z, w))
+    )))))))))
   and primapp () = prec_parse 0
   and operator () =
     symbol Tokenizer.Plus >>= (fn x => return "+")
@@ -148,9 +189,11 @@ struct
     ++ symbol Tokenizer.Greater >>= (fn x => return ">")
     ++ symbol Tokenizer.LessEq >>= (fn x => return "<=")
     ++ symbol Tokenizer.GreaterEq >>= (fn x => return ">=")
+    ++ symbol Tokenizer.RightDashArrow >>= (fn x => return "->")
   and binop level =
     let 
       val opr = [
+      ("->", 4, LeftAssoc),
       ("=", 4, LeftAssoc),
       ("<>", 4, LeftAssoc),
       ("<", 4, LeftAssoc),

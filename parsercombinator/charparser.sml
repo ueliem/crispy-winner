@@ -5,6 +5,7 @@ sig
   val satisfies : (char -> bool) -> char CParser.Parser
   val lpar : unit -> char CParser.Parser
   val rpar : unit -> char CParser.Parser
+  val comma : unit -> char CParser.Parser
   val symbol : unit -> char CParser.Parser
   val digit : unit -> char CParser.Parser
   val letter : unit -> char CParser.Parser
@@ -32,6 +33,8 @@ struct
   fun rpar () = satisfies (fn x => x = #")")
 
   fun symbol () = satisfies (fn x => List.exists (fn y => x = y) symbols)
+
+  fun comma () = satisfies (fn x => x = #",")
 
   fun digit () = satisfies Char.isAlphaNum
 

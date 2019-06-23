@@ -1,7 +1,9 @@
 structure Syntax : sig
   datatype sort =
-    ProperTypes
-  | Kinds
+    Kind
+  | ProperType
+  | IntSort
+  | BoolSort
   type sorts = sort list
   type axiom = sort * sort
   type axioms = axiom list
@@ -17,6 +19,8 @@ structure Syntax : sig
   datatype lit =
     IntType
   | IntLit of int
+  | BoolType
+  | BoolLit of bool
 
   datatype term =
     Sort of sort
@@ -27,7 +31,7 @@ structure Syntax : sig
   | DepProd of var * term * term
   | Unknown
   | PrimApp of string * term * term
-  | LetTerm of var * term * term
+  | LetTerm of var * term * term * term
   | DepSum of var * term * term
   | Pair of term * term
   | Fst of term
@@ -45,8 +49,11 @@ struct
   open OptionMonad
 
   datatype sort =
-    ProperTypes
-  | Kinds
+    Kind
+  | ProperType
+  | IntSort
+  | BoolSort
+
   type sorts = sort list
   type axiom = sort * sort
   type axioms = axiom list
@@ -62,6 +69,8 @@ struct
   datatype lit =
     IntType
   | IntLit of int
+  | BoolType
+  | BoolLit of bool
 
   datatype term =
     Sort of sort
@@ -72,7 +81,7 @@ struct
   | DepProd of var * term * term
   | Unknown
   | PrimApp of string * term * term
-  | LetTerm of var * term * term
+  | LetTerm of var * term * term * term
   | DepSum of var * term * term
   | Pair of term * term
   | Fst of term

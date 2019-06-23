@@ -5,18 +5,20 @@
 This is a functional systems language. 
 
 - Pure Type System
-- Type preserving compiler
-- Syntactic sugar
-	- Pairs, First, and Second
+	- Functional, semi-full
+- Built-in integer and boolean types
+- Pairs, First, and Second
 - Sigma types
-- Delta rules
+- Delta rules (WIP)
+- Syntactic sugar (WIP)
+- Core language with de Bruijn indices
+- Type preserving compiler (WIP)
 
 ## TODO
 
 - Good error messages
 - Integer operations
 - Delta rules
-- Sigma types
 - Type check syntax phase
 - ANF transform
 - ANF type checking
@@ -31,5 +33,6 @@ This is a functional systems language.
 - Parsing to abstract syntax tree
 - Desugaring to core PTS
 - Transforming to A-Normal form
+- Closure conversion
 - Transforming to DTAL
 

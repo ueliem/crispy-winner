@@ -1,106 +1,280 @@
 datatype TypeError =
   Expected of PTS.term * PTS.term
-| Unbound of PTS.vname
-| CannotApply of PTS.term * PTS.term
-| CannotUnify of PTS.term * PTS.term
-| NoAxiom of PTS.sort
+| Mismatch of PTS.term * PTS.term
 | TermError of PTS.term
+| NoAxiom of PTS.sort
+| NoRule of PTS.term * PTS.sort * PTS.sort
 | NoSort of PTS.term * PTS.term
 | NoSortForTerm of PTS.term
-| NoRule of PTS.term * PTS.sort * PTS.sort
-
-type gamma = (PTS.vname, PTS.term) AssocList.asl
 
 type typestate = {
-  pairs : gamma,
+  deltas : PTS.defs,
   errs : TypeError list
 }
 
 structure TypeCheckMonad = StateFunctor(type s = typestate)
 
 structure TypeCheck : sig
+  val get_defs : unit -> PTS.defs TypeCheckMonad.monad
+  val put_error : TypeError -> unit TypeCheckMonad.monad
   val fail : TypeError -> PTS.term TypeCheckMonad.monad
-  val get_term_ty : PTS.vname -> PTS.term TypeCheckMonad.monad
-  val set_term_ty : PTS.vname -> PTS.term -> unit TypeCheckMonad.monad
-  val whcheck : PTS.spec -> gamma -> PTS.term -> PTS.term TypeCheckMonad.monad
-  val check : PTS.spec -> gamma -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val whcheck_sfsd : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val whcheck_nat : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val check_sfsd : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val check_nat : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
 end
 =
 struct
   open TypeCheckMonad
 
-  fun fail error = 
+  fun get_defs () =
     get >>= (fn s =>
-    put ({ pairs = #pairs s, errs = error::(#errs s) }) >>= (fn _ =>
-      return PTS.Unknown
-    ))
-
-  fun get_term_ty v =
+      return (#deltas s)
+    )
+  and put_error error =
     get >>= (fn s =>
-      case AssocList.get v (#pairs s) of
-        SOME t => return t
-      | NONE => fail (Unbound v)
+    put ({ deltas = #deltas s, errs = error::(#errs s) })
+    )
+  and fail error = 
+    put_error error >>= (fn _ =>
+      return (PTS.Unknown)
     )
 
-  fun set_term_ty v t =
-    get >>= (fn s =>
-    put ({ pairs = AssocList.insert (v, t) (#pairs s), errs = #errs s}) >>= (fn _ =>
-      return ()
+  fun whcheck_sfsd sp env t =
+    check_sfsd sp env t >>= (fn x =>
+    get_defs () >>= (fn d =>
+      return (PTS.whreduce d x)
     ))
-
-  fun whcheck sp env t =
-    check sp env t >>= (fn x =>
-      return (PTS.whreduce x)
-    )
-  and check sp env (PTS.Variable (v, t)) = return t
-  | check sp env (PTS.Sort s) =
+  and whcheck_nat sp env t =
+    check_nat sp env t >>= (fn x =>
+    get_defs () >>= (fn d =>
+      return (PTS.whreduce d x)
+    ))
+  and check_sfsd sp env t =
+    case t of 
+      PTS.Sort s =>
       (case List.find (fn a => #1 a = s) (#2 sp) of
         SOME s' => return (PTS.Sort (#2 s'))
       | NONE => fail (NoAxiom s))
-  | check sp env (PTS.Literal l) =
+    | PTS.Variable n =>
+      let val a = List.nth (env, n - 1)
+      in
+        whcheck_sfsd sp env a >>= (fn b =>
+          case b of
+            PTS.Sort s => return a
+          | _ => fail (TermError t)
+        )
+      end
+    | PTS.Literal l =>
       (case l of
-        PTS.IntType => return (PTS.Sort PTS.ProperTypes)
-      | PTS.IntLit i => return (PTS.Sort PTS.IntSort)
+        PTS.IntLit i => return (PTS.Sort PTS.IntSort)
+      | PTS.BoolLit b => return (PTS.Sort PTS.BoolSort)
       )
-  | check sp env (PTS.Abs (v, t1, t2)) =
-      check sp env t1 >>= (fn x =>
-        case PTS.rho sp (PTS.sort sp env (SOME t1), PTS.elmt sp env (SOME t2)) of
-          SOME _ => return (PTS.DepProd (v, t1, x))
-        | NONE => fail (TermError (PTS.Abs (v, t1, t2)))
-      )
-  | check sp env (PTS.App (t1, t2)) = 
-      whcheck sp env t1 >>= (fn t1' =>
-      check sp env t2 >>= (fn t2' =>
-        (case t1' of
-          PTS.DepProd (v, t3, t4) => 
+    | PTS.Abs (t1, t2) =>
+      check_sfsd sp env t1 >>= (fn t1' =>
+      check_sfsd sp (t1::env) t2 >>= (fn t2' =>
+        case t1' of
+          PTS.Sort s =>
+            (case List.find (fn a => #1 a = s) (#2 sp) of
+              SOME _ => return (PTS.DepProd (t1, t2'))
+            | NONE => fail (TermError t))
+        | _ => fail (TermError t)
+      ))
+    | PTS.App (t1, t2) =>
+      whcheck_sfsd sp env t1 >>= (fn t1' =>
+      check_sfsd sp env t2 >>= (fn t2' =>
+      get_defs () >>= (fn d =>
+        case t1' of
+          PTS.DepProd (t3, t4) => 
             let 
-              val t2'' = PTS.nfreduce t2'
-              val t3' = PTS.nfreduce t3
+              val t2'' = PTS.nfreduce d t2'
+              val t3' = PTS.nfreduce d t3
             in
               if t2'' = t3' then
-                return (PTS.weaksubst (v, t2) t4)
-              else fail (CannotUnify (t2'', t3'))
+                return (PTS.subst 1 t2 t4)
+              else fail (TermError t)
             end
-        | t => fail (TermError t)
-        )
+        | _ => fail (TermError t)
+      )))
+    | PTS.DepProd (t1, t2) =>
+      whcheck_sfsd sp env t1 >>= (fn t1' =>
+      whcheck_sfsd sp (t1::env) t2 >>= (fn t2' =>
+        case (t1', t2') of
+          (PTS.Sort s1, PTS.Sort s2) =>
+            (case PTS.rho sp (SOME s1, SOME s2) of
+              SOME s3 => return (PTS.Sort s3)
+            | NONE => fail (TermError t)
+            )
+        | _ => fail (TermError t)
       ))
-  | check sp env (PTS.DepProd (v, t1, t2)) =
-      check sp env t2 >>= (fn x =>
-        let
-          val t2' = PTS.whreduce x
-          val t1sort = PTS.sort sp env (SOME t1)
+    | PTS.LetTerm (t1, t2, t3) =>
+      check_sfsd sp env t2 >>= (fn t2' =>
+      check_sfsd sp env t3 >>= (fn t3' =>
+      get_defs () >>= (fn d =>
+        let 
+          val t1' = PTS.nfreduce d t1
+          val t2'' = PTS.nfreduce d t2'
         in
-          (case t1sort of
-            SOME s1 => 
-              (case t2' of
-                PTS.Sort s2 => 
-                  (case PTS.rho sp (SOME s1, SOME s2) of
-                    SOME s3 => return (PTS.Sort s3)
-                  | NONE => fail (NoRule (PTS.DepProd (v, t1, t2), s1, s2)))
-              | _ => fail (NoSort (PTS.DepProd (v, t1, t2), t2')))
-          | NONE => fail (NoSortForTerm t1))
+          if t1' = t2'' then
+            return (PTS.LetTerm (t1', t2, t3'))
+          else fail (TermError t)
         end
+      )))
+    | PTS.DepSum (t1, t2) =>
+      whcheck_sfsd sp env t1 >>= (fn t1' =>
+      whcheck_sfsd sp (t1::env) t2 >>= (fn t2' =>
+        case (t1', t2') of
+          (PTS.Sort s1, PTS.Sort s2) =>
+            (case PTS.rho sp (SOME s1, SOME s2) of
+              SOME s3 => return (PTS.Sort s3)
+            | NONE => fail (TermError t)
+            )
+        | _ => fail (TermError t)
+      ))
+    | PTS.DepPair (t1, t2, t3) =>
+        check_sfsd sp env t1 >>= (fn t1' =>
+        check_sfsd sp (t1::env) t2 >>= (fn t2' =>
+        get_defs () >>= (fn d =>
+          (case t3 of
+            PTS.DepSum (t4, t5) =>
+              let 
+                val t1'' = PTS.nfreduce d t1'
+                val t4' = PTS.nfreduce d t4
+                val t2'' = PTS.nfreduce d (PTS.subst 1 t1 t2')
+                val t5' = PTS.nfreduce d (PTS.subst 1 t1 t5)
+              in
+                if t4' = t1'' then
+                  if t5' = t2'' then
+                    return t3
+                  else fail (TermError t)
+                else fail (TermError t)
+              end
+          | _ => fail (TermError t))
+        )))
+    | PTS.Fst t1 =>
+        check_sfsd sp env t1 >>= (fn x =>
+          (case x of
+            PTS.DepSum (t2, t3) => return t2
+          | _ => fail (TermError t))
+        )
+    | PTS.Snd t1 =>
+        check_sfsd sp env t1 >>= (fn x =>
+          (case x of
+            PTS.DepSum (t2, t3) => return (PTS.subst 1 (PTS.Fst t1) t3)
+          | _ => fail (TermError t))
+        )
+    | PTS.Unknown => return PTS.Unknown
+  and check_nat sp env t =
+    case t of 
+      PTS.Sort s =>
+      (case List.find (fn a => #1 a = s) (#2 sp) of
+        SOME s' => return (PTS.Sort (#2 s'))
+      | NONE => fail (NoAxiom s))
+    | PTS.Variable n =>
+      let val a = List.nth (env, n - 1)
+      in
+        whcheck_nat sp env a >>= (fn b =>
+          case b of
+            PTS.Sort s => return a
+          | _ => fail (TermError t)
+        )
+      end
+    | PTS.Literal l =>
+      (case l of
+        PTS.IntLit i => return (PTS.Sort PTS.IntSort)
+      | PTS.BoolLit b => return (PTS.Sort PTS.BoolSort)
       )
-  | check sp env (PTS.Unknown) = return PTS.Unknown
+    | PTS.Abs (t1, t2) =>
+        check_nat sp (t1::env) t2 >>= (fn t2' =>
+        check_sfsd sp env (PTS.DepProd (t1, t2')) >>= (fn t1' =>
+          (case t1' of
+            PTS.Sort s => return (PTS.DepProd (t1, t2'))
+          | _ => fail (TermError t))
+        ))
+    | PTS.App (t1, t2) =>
+      whcheck_nat sp env t1 >>= (fn t1' =>
+      check_sfsd sp env t2 >>= (fn t2' =>
+      get_defs () >>= (fn d =>
+        case t1' of
+          PTS.DepProd (t3, t4) => 
+            let 
+              val t2'' = PTS.nfreduce d t2'
+              val t3' = PTS.nfreduce d t3
+            in
+              if t2'' = t3' then
+                return (PTS.subst 1 t2 t4)
+              else fail (TermError t)
+            end
+        | _ => fail (TermError t)
+      )))
+    | PTS.DepProd (t1, t2) =>
+      whcheck_nat sp env t1 >>= (fn t1' =>
+      whcheck_nat sp (t1::env) t2 >>= (fn t2' =>
+        case (t1', t2') of
+          (PTS.Sort s1, PTS.Sort s2) =>
+            (case PTS.rho sp (SOME s1, SOME s2) of
+              SOME s3 => return (PTS.Sort s3)
+            | NONE => fail (TermError t)
+            )
+        | _ => fail (TermError t)
+      ))
+    | PTS.LetTerm (t1, t2, t3) =>
+      check_nat sp env t2 >>= (fn t2' =>
+      check_nat sp env t3 >>= (fn t3' =>
+      get_defs () >>= (fn d =>
+        let 
+          val t1' = PTS.nfreduce d t1
+          val t2'' = PTS.nfreduce d t2'
+        in
+          if t1' = t2'' then
+            return (PTS.LetTerm (t1', t2, t3'))
+          else fail (TermError t)
+        end
+      )))
+    | PTS.DepSum (t1, t2) =>
+      whcheck_nat sp env t1 >>= (fn t1' =>
+      whcheck_nat sp (t1::env) t2 >>= (fn t2' =>
+        case (t1', t2') of
+          (PTS.Sort s1, PTS.Sort s2) =>
+            (case PTS.rho sp (SOME s1, SOME s2) of
+              SOME s3 => return (PTS.Sort s3)
+            | NONE => fail (TermError t)
+            )
+        | _ => fail (TermError t)
+      ))
+    | PTS.DepPair (t1, t2, t3) =>
+        check_nat sp env t1 >>= (fn t1' =>
+        check_nat sp (t1::env) t2 >>= (fn t2' =>
+        get_defs () >>= (fn d =>
+          (case t3 of
+            PTS.DepSum (t4, t5) =>
+              let 
+                val t1'' = PTS.nfreduce d t1'
+                val t4' = PTS.nfreduce d t4
+                val t2'' = PTS.nfreduce d (PTS.subst 1 t1 t2')
+                val t5' = PTS.nfreduce d (PTS.subst 1 t1 t5)
+              in
+                if t4' = t1'' then
+                  if t5' = t2'' then
+                    return t3
+                  else fail (TermError t)
+                else fail (TermError t)
+              end
+          | _ => fail (TermError t))
+        )))
+    | PTS.Fst t1 =>
+        check_nat sp env t1 >>= (fn x =>
+          (case x of
+            PTS.DepSum (t2, t3) => return t2
+          | _ => fail (TermError t))
+        )
+    | PTS.Snd t1 =>
+        check_nat sp env t1 >>= (fn x =>
+          (case x of
+            PTS.DepSum (t2, t3) => return (PTS.subst 1 (PTS.Fst t1) t3)
+          | _ => fail (TermError t))
+        )
+    | PTS.Unknown => return PTS.Unknown
+
 end
 

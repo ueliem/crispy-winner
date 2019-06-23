@@ -4,6 +4,11 @@ sig
     Identifier of string
   | Integer of int
   | KWInt
+  | KWBool
+  | True
+  | False
+  | First
+  | Second
   | ForAll
   | Pi
   | Sigma
@@ -31,6 +36,7 @@ sig
   | RightArrow
   | RightDashArrow
   | Colon
+  | Comma
   | EOI
   val whitespace : unit -> char list CParser.Parser
   val word : unit -> token CParser.Parser
@@ -47,6 +53,11 @@ struct
     Identifier of string
   | Integer of int
   | KWInt
+  | KWBool
+  | True
+  | False
+  | First
+  | Second
   | ForAll
   | Pi
   | Sigma
@@ -74,6 +85,7 @@ struct
   | RightArrow
   | RightDashArrow
   | Colon
+  | Comma
   | EOI
 
   open CParser
@@ -98,6 +110,11 @@ struct
       | "then" => return Then
       | "else" => return Else
       | "int" => return KWInt
+      | "bool" => return KWBool
+      | "true" => return True
+      | "false" => return False
+      | "fst" => return First
+      | "snd" => return Second
       | _ => return (Identifier (String.implode (x::y)))
     ))
 
@@ -114,6 +131,11 @@ struct
   fun rpar () : token Parser =
     CharParser.rpar () >>= (fn x =>
       return RPar
+    )
+
+  fun comma () : token Parser =
+    CharParser.comma () >>= (fn x =>
+      return Comma
     )
 
   fun sym () : token Parser =
