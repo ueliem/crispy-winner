@@ -28,6 +28,7 @@ sig
   | Star
   | Slash
   | Equal
+  | EqualEqual
   | NotEqual
   | Less
   | Greater
@@ -38,6 +39,10 @@ sig
   | Colon
   | Comma
   | EOI
+
+  structure TokenVector : MONO_VECTOR
+  structure TokenStream : STRM
+
   val whitespace : unit -> char list CParser.Parser
   val word : unit -> token CParser.Parser
   val integer : unit -> token CParser.Parser
@@ -45,7 +50,7 @@ sig
   val rpar : unit -> token CParser.Parser
   val sym : unit -> token CParser.Parser
   val tok : unit -> token CParser.Parser
-  val tokenize : char Stream.stream -> token vector
+  val tokenize : CharStream.stream -> TokenStream.stream
 end
 =
 struct
@@ -77,6 +82,7 @@ struct
   | Star
   | Slash
   | Equal
+  | EqualEqual
   | NotEqual
   | Less
   | Greater
@@ -89,6 +95,15 @@ struct
   | EOI
 
   open CParser
+
+  structure TokenVector : MONO_VECTOR =
+  struct
+    open Vector
+    type vector = token vector
+    and elem = token
+  end
+
+  structure TokenStream = StreamFunctor (TokenVector)
 
   fun whitespace () : char list Parser =
     many (CharParser.space ())
@@ -146,6 +161,7 @@ struct
       | "*" => return Star
       | "/" => return Slash
       | "=" => return Equal
+      | "==" => return EqualEqual
       | "<>" => return NotEqual
       | "<" => return Less
       | ">" => return Greater
@@ -168,10 +184,10 @@ struct
       return x
     ))
 
-  fun tokenize (s : char Stream.stream) : token vector =
+  fun tokenize (s : CharStream.stream) : TokenStream.stream =
     case many (tok ()) s of
-      Ok (x, xs) => Vector.fromList (x @ [EOI])
-    | Error _ => Vector.fromList []
+      Ok (x, xs) => { pos = 0, s = TokenVector.fromList (x @ [EOI]) }
+    | Error _ => { pos = 0, s = TokenVector.fromList [] }
 
 end
 

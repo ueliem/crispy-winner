@@ -1,22 +1,24 @@
-signature STREAM =
+signature STRM =
 sig
-  type 'a stream
-  val uncons : 'a stream -> ('a * 'a stream) option
-  val reset : 'a stream * int -> 'a stream
-  val pos : 'a stream -> int
+  type stream
+  type elem
+  val uncons : stream -> (elem * stream) option
+  val reset : stream * int -> stream
+  val pos : stream -> int
 end
 
-structure Stream : STREAM =
+functor StreamFunctor (S : MONO_VECTOR) : STRM =
 struct
-  type 'a stream = { s : 'a vector, pos : int }
+  type stream = { s : S.vector, pos : int }
+  type elem = S.elem
 
   fun uncons (strm) = 
   let
     val pos = #pos strm
-    val len = Vector.length (#s strm)
+    val len = S.length (#s strm)
   in
     if pos < len then
-      SOME (Vector.sub (#s strm, pos), { s = #s strm, pos = pos + 1 })
+      SOME (S.sub (#s strm, pos), { s = #s strm, pos = pos + 1 })
     else NONE
   end
 
@@ -27,26 +29,25 @@ struct
 
 end
 
-signature PARSER =
+functor ParserFunctor (S : STRM) :
 sig
   include MONADPLUSZERO
   type item
   datatype 'output ParseResult =
-    Ok of 'output * item Stream.stream
-  | Error of item Stream.stream
+    Ok of 'output * S.stream
+  | Error of S.stream
   type 'output Parser
   val fail : 'a monad
   val many : 'output Parser -> 'output list Parser
   val many1 : 'output Parser -> 'output list Parser
 end
-
-functor ParserFunctor (type item) : PARSER =
+=
 struct
-  type item = item
+  type item = S.elem
   datatype 'output ParseResult =
-    Ok of 'output * item Stream.stream
-  | Error of item Stream.stream
-  type 'output Parser = item Stream.stream -> 'output ParseResult
+    Ok of 'output * S.stream
+  | Error of S.stream
+  type 'output Parser = S.stream -> 'output ParseResult
   type 'a monad = 'a Parser
 
   fun return x = (fn strm => Ok (x, strm))
@@ -54,19 +55,19 @@ struct
   val fail = (fn strm => Error (strm))
 
   fun op >>= (p, f) = 
-    (fn (strm : item Stream.stream) =>
-    let val pos = Stream.pos strm
+    (fn (strm : S.stream) =>
+    let val pos = S.pos strm
     in
       (case p strm of
         Ok (x, strm') => f x strm'
       | Error (strm') => Error strm')
     end)
 
-  val zero = (fn (strm : item Stream.stream) => Error strm)
+  val zero = (fn (strm : S.stream) => Error strm)
 
   fun op ++ (p1 : 'a Parser, p2 : 'a Parser) : 'a Parser =
-    (fn (strm : item Stream.stream) => 
-    let val pos = Stream.pos strm
+    (fn (strm : S.stream) => 
+    let val pos = S.pos strm
     in
       (case p1 strm of
         Error e1 =>
@@ -75,11 +76,6 @@ struct
           | Ok r => Ok r)
       | Ok r => Ok r
       )
-      (* (case (p1 strm, p2 strm) of
-        (Error _, Error _) => Error strm
-      | (Error _, Ok r) => Ok r
-      | (Ok r, _) => Ok r
-      ) *)
     end)
 
   fun many (p : 'a Parser) : 'a list Parser =

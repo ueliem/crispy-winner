@@ -1,4 +1,4 @@
-structure TParser = ParserFunctor(type item = Tokenizer.token)
+structure TParser = ParserFunctor(Tokenizer.TokenStream)
 
 structure SyntaxParser : 
 sig
@@ -11,6 +11,8 @@ sig
   val literal : unit -> Syntax.term TParser.Parser
   val application : unit -> Syntax.term TParser.Parser
   val abstraction : unit -> Syntax.term TParser.Parser
+  val primapp : unit -> Syntax.term TParser.Parser
+  val declaration : unit -> Syntax.declaration TParser.Parser
   val program : unit -> Syntax.program TParser.Parser
 end
 =
@@ -23,8 +25,8 @@ struct
   | NoAssoc
 
   fun any () =
-    (fn (s : Tokenizer.token Stream.stream) =>
-      (case Stream.uncons s of
+    (fn (s : Tokenizer.TokenStream.stream) =>
+      (case Tokenizer.TokenStream.uncons s of
         SOME (x, xs) => TParser.Ok (x, xs)
       | NONE => fail s))
 
@@ -84,8 +86,8 @@ struct
     ++ variable ()
     ++ literal () 
   and term () =
-    application ()
-    ++ primapp ()
+    primapp ()
+    ++ application ()
     ++ atom ()
   and parenterm () = 
     lpar () >>= (fn _ =>
@@ -95,10 +97,8 @@ struct
     )))
   and variable () = 
     ident () >>= (fn x =>
-    colon () >>= (fn _ =>
-    term () >>= (fn y =>
-      return (Syntax.Variable (Syntax.Var x, y))
-    )))
+      return (Syntax.Variable (Syntax.Var x))
+    )
   and pair () = 
     lpar () >>= (fn _ =>
     term () >>= (fn x =>
@@ -183,7 +183,7 @@ struct
     ++ symbol Tokenizer.Dash >>= (fn x => return "-")
     ++ symbol Tokenizer.Star >>= (fn x => return "*")
     ++ symbol Tokenizer.Slash >>= (fn x => return "/")
-    ++ symbol Tokenizer.Equal >>= (fn x => return "=")
+    ++ symbol Tokenizer.EqualEqual >>= (fn x => return "==")
     ++ symbol Tokenizer.NotEqual >>= (fn x => return "<>")
     ++ symbol Tokenizer.Less >>= (fn x => return "<")
     ++ symbol Tokenizer.Greater >>= (fn x => return ">")
@@ -194,7 +194,7 @@ struct
     let 
       val opr = [
       ("->", 4, LeftAssoc),
-      ("=", 4, LeftAssoc),
+      ("==", 4, LeftAssoc),
       ("<>", 4, LeftAssoc),
       ("<", 4, LeftAssoc),
       (">", 4, LeftAssoc),
@@ -232,7 +232,7 @@ struct
     colon () >>= (fn _ =>
     term () >>= (fn y =>
     equal () >>= (fn _ =>
-    term () >>= (fn z =>
+    primapp () >>= (fn z =>
       return (Syntax.Value (Syntax.Var x, y, z))
     ))))))
 

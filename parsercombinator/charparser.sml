@@ -1,4 +1,5 @@
-structure CParser = ParserFunctor(type item = char)
+structure CharStream = StreamFunctor (CharVector)
+structure CParser = ParserFunctor(CharStream)
 
 structure CharParser : 
 sig
@@ -19,8 +20,8 @@ struct
   val symbols = [#"+", #"-", #"*", #"/", #"=", #">", #"<", #":"]
 
   fun any () =
-    (fn (s : char Stream.stream) =>
-      (case Stream.uncons s of
+    (fn (s : CharStream.stream) =>
+      (case CharStream.uncons s of
         SOME (x, xs) => CParser.Ok (x, xs)
       | NONE => fail s))
 

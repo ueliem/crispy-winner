@@ -4,26 +4,14 @@ structure PTS : sig
     Var of int
   | Anonymous
 
-  datatype sort =
-    Kind
-  | ProperType
-  | IntSort
-  | BoolSort
-
-  type sorts = sort list
-  type axiom = sort * sort
-  type axioms = axiom list
-  type rule = sort * sort * sort
-  type rules = rule list
-
-  type spec = sorts * axioms * rules
-
   datatype Lit =
-    IntLit of int
+    IntType
+  | IntLit of int
   | BoolLit of bool
+  | BoolType
 
   datatype term =
-    Sort of sort
+    Sort of FuncSpec.sort
   | Variable of int
   | Literal of Lit
   | Abs of term * term
@@ -38,8 +26,6 @@ structure PTS : sig
 
   type env = term list
   type defs = (int * term, term) AssocList.asl
-
-  val rho : spec -> (sort option * sort option) -> sort option
 
   val update : int -> int -> term -> term
   val subst : int -> term -> term -> term
@@ -57,26 +43,14 @@ struct
     Var of int
   | Anonymous
 
-  datatype sort =
-    Kind
-  | ProperType
-  | IntSort
-  | BoolSort
-
-  type sorts = sort list
-  type axiom = sort * sort
-  type axioms = axiom list
-  type rule = sort * sort * sort
-  type rules = rule list
-
-  type spec = sorts * axioms * rules
-
   datatype Lit =
-    IntLit of int
+    IntType
+  | IntLit of int
   | BoolLit of bool
+  | BoolType
 
   datatype term =
-    Sort of sort
+    Sort of FuncSpec.sort
   | Variable of int
   | Literal of Lit
   | Abs of term * term
@@ -91,14 +65,6 @@ struct
 
   type env = term list
   type defs = (int * term, term) AssocList.asl
-
-  fun rho sp (SOME t1, SOME t2) =
-    (case List.find (fn x => #1 x = t1 andalso #2 x = t2) (#3 sp) of
-      SOME triple => SOME (#3 triple)
-    | NONE => NONE)
-  | rho sp (SOME t1, NONE) = NONE
-  | rho sp (NONE, SOME t2) = NONE
-  | rho sp (NONE, NONE) = NONE
 
   fun update k i t =
     case t of

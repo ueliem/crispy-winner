@@ -2,8 +2,8 @@ datatype TypeError =
   Expected of PTS.term * PTS.term
 | Mismatch of PTS.term * PTS.term
 | TermError of PTS.term
-| NoAxiom of PTS.sort
-| NoRule of PTS.term * PTS.sort * PTS.sort
+| NoAxiom of FuncSpec.sort
+| NoRule of PTS.term * FuncSpec.sort * FuncSpec.sort
 | NoSort of PTS.term * PTS.term
 | NoSortForTerm of PTS.term
 
@@ -18,10 +18,10 @@ structure TypeCheck : sig
   val get_defs : unit -> PTS.defs TypeCheckMonad.monad
   val put_error : TypeError -> unit TypeCheckMonad.monad
   val fail : TypeError -> PTS.term TypeCheckMonad.monad
-  val whcheck_sfsd : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
-  val whcheck_nat : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
-  val check_sfsd : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
-  val check_nat : PTS.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val whcheck_sfsd : FuncSpec.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val whcheck_nat : FuncSpec.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val check_sfsd : FuncSpec.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
+  val check_nat : FuncSpec.spec -> PTS.env -> PTS.term -> PTS.term TypeCheckMonad.monad
 end
 =
 struct
@@ -67,8 +67,10 @@ struct
       end
     | PTS.Literal l =>
       (case l of
-        PTS.IntLit i => return (PTS.Sort PTS.IntSort)
-      | PTS.BoolLit b => return (PTS.Sort PTS.BoolSort)
+        PTS.IntType => return (PTS.Sort FuncSpec.ProperType)
+      | PTS.IntLit i => return (PTS.Literal PTS.IntType)
+      | PTS.BoolType => return (PTS.Sort FuncSpec.ProperType)
+      | PTS.BoolLit b => return (PTS.Literal PTS.BoolType)
       )
     | PTS.Abs (t1, t2) =>
       check_sfsd sp env t1 >>= (fn t1' =>
@@ -101,7 +103,7 @@ struct
       whcheck_sfsd sp (t1::env) t2 >>= (fn t2' =>
         case (t1', t2') of
           (PTS.Sort s1, PTS.Sort s2) =>
-            (case PTS.rho sp (SOME s1, SOME s2) of
+            (case FuncSpec.rho sp (s1, s2) of
               SOME s3 => return (PTS.Sort s3)
             | NONE => fail (TermError t)
             )
@@ -125,7 +127,7 @@ struct
       whcheck_sfsd sp (t1::env) t2 >>= (fn t2' =>
         case (t1', t2') of
           (PTS.Sort s1, PTS.Sort s2) =>
-            (case PTS.rho sp (SOME s1, SOME s2) of
+            (case FuncSpec.rho sp (s1, s2) of
               SOME s3 => return (PTS.Sort s3)
             | NONE => fail (TermError t)
             )
@@ -181,8 +183,10 @@ struct
       end
     | PTS.Literal l =>
       (case l of
-        PTS.IntLit i => return (PTS.Sort PTS.IntSort)
-      | PTS.BoolLit b => return (PTS.Sort PTS.BoolSort)
+        PTS.IntType => return (PTS.Sort FuncSpec.ProperType)
+      | PTS.IntLit i => return (PTS.Literal PTS.IntType)
+      | PTS.BoolType => return (PTS.Sort FuncSpec.ProperType)
+      | PTS.BoolLit b => return (PTS.Literal PTS.BoolType)
       )
     | PTS.Abs (t1, t2) =>
         check_nat sp (t1::env) t2 >>= (fn t2' =>
@@ -212,7 +216,7 @@ struct
       whcheck_nat sp (t1::env) t2 >>= (fn t2' =>
         case (t1', t2') of
           (PTS.Sort s1, PTS.Sort s2) =>
-            (case PTS.rho sp (SOME s1, SOME s2) of
+            (case FuncSpec.rho sp (s1, s2) of
               SOME s3 => return (PTS.Sort s3)
             | NONE => fail (TermError t)
             )
@@ -236,7 +240,7 @@ struct
       whcheck_nat sp (t1::env) t2 >>= (fn t2' =>
         case (t1', t2') of
           (PTS.Sort s1, PTS.Sort s2) =>
-            (case PTS.rho sp (SOME s1, SOME s2) of
+            (case FuncSpec.rho sp (s1, s2) of
               SOME s3 => return (PTS.Sort s3)
             | NONE => fail (TermError t)
             )
