@@ -72,3 +72,33 @@ struct
 
 end
 
+functor OptionT (structure M : MONAD) :
+sig
+  include MONAD where type 'a monad = 'a option M.monad
+
+  val lift : 'a M.monad -> 'a option M.monad
+
+  val fail : unit -> 'a monad
+end
+=
+struct
+  type 'a monad = 'a option M.monad
+
+  fun return x = M.return (SOME x)
+
+  fun fail () = M.return NONE
+
+  fun op >>= (m : 'a option M.monad, f : 'a -> 'b option M.monad) : 'b option M.monad = 
+    M.>>= (m, (fn (x : 'a option) =>
+      case x of
+        SOME y => f y
+      | NONE => M.return NONE
+    ))
+
+  fun lift (m : 'a M.monad) : 'a option M.monad =
+    M.>>= (m, fn (x : 'a) =>
+      M.return (SOME x)
+    )
+
+end
+

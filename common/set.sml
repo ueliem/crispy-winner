@@ -12,6 +12,7 @@ sig
   (* val intersection : ''a set -> ''a set -> ''a set *)
   val difference : ''a set -> ''a set -> ''a set
   (* val subset : ''a set -> ''a set -> ''a set*)
+  val eq : ''a set -> ''a set -> bool
 end
 
 structure Set : SET =
@@ -41,6 +42,10 @@ struct
 
   fun difference s t =
     List.filter (fn x => not (member x t)) s
+
+  fun eq s t =
+    List.length s = List.length t
+    andalso List.all (fn x => member x t) s
 
 end
 
