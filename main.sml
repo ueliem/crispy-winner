@@ -12,7 +12,7 @@ use "src/cek/parser.sml";
 open Lang
 open Interp
 
-val prog = App (Value (Lambda ("x", Var "x", IntTy)), Value (IntLit 7))
+val prog = App (BoxedValue (BoxAbs (Lambda ("x", Var "x", IntTy, "r"))), Value (IntLit 7))
 (* val prog = Lambda ("x", Var "x", IntTy) *)
 val seq = "fn x : int => x + 1"
 

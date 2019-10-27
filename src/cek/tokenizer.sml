@@ -14,6 +14,8 @@ sig
   | Sigma
   | Val
   | Let
+  | LetRegion
+  | At
   | In
   | End
   | Fun
@@ -68,6 +70,8 @@ struct
   | Sigma
   | Val
   | Let
+  | LetRegion
+  | At
   | In
   | End
   | Fun
@@ -117,6 +121,8 @@ struct
       | "sigma" => return Sigma
       | "val" => return Val
       | "let" => return Let
+      | "letregion" => return LetRegion
+      | "at" => return At
       | "in" => return In
       | "end" => return End
       | "fun" => return Fun

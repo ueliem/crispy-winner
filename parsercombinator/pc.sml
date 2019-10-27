@@ -40,6 +40,7 @@ sig
   val fail : 'a monad
   val many : 'output Parser -> 'output list Parser
   val many1 : 'output Parser -> 'output list Parser
+  val optional : 'output Parser -> 'output option Parser
 end
 =
 struct
@@ -90,6 +91,12 @@ struct
     many p >>= (fn y =>
       return (x::y)
     ))
+
+  fun optional (p : 'a Parser) : 'a option Parser =
+    p >>= (fn x =>
+      return (SOME x)
+    )
+    ++ (return NONE)
 end
 
 

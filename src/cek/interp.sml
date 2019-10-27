@@ -1,19 +1,19 @@
 structure Interp : sig
   datatype environment = 
     EmptyEnv
-  | Env of Lang.var * machinevalue * environment
+  | Env of Lang.var * Lang.value * environment
 
-  and machinevalue = 
-    MachineInt of int
-  | MachineBool of bool
-  | MachineUnit
-  | MachineTuple of Lang.term * Lang.term
-  | MachineClosure of Lang.var * Lang.term * Lang.ty * environment
+  datatype heapvalue = 
+    HeapIntLit of int
+  | HeapBoolLit of bool
+  | HeapUnitLit
+  | HeapLambda of Lang.var * Lang.term * Lang.ty
+  | HeapRegionLambda of Lang.regionvar * Lang.abs
+  | HeapTuple of Lang.term * Lang.term
+  | HeapBarePointer of Lang.regionvar * Lang.pointername
 
-  type pointername = int
-  type regionname = string
-  type region = machinevalue list
-  type store = (regionname * region) list
+  type region = heapvalue list
+  type store = (Lang.regionvar * region) list
 
   datatype continuation =
     Empty
@@ -22,17 +22,18 @@ structure Interp : sig
   | CALL of Lang.var * Lang.term * environment * continuation
   | LT of Lang.var * Lang.ty * Lang.term * environment * continuation
   | IF of Lang.term * Lang.term * environment * continuation
-  | TUP1 of Lang.term * environment * continuation
-  | TUP2 of Lang.term * environment * continuation
+  | TUP1 of Lang.regionvar * Lang.term * environment * continuation
+  | TUP2 of Lang.regionvar * Lang.term * environment * continuation
   | FST of environment * continuation
   | SND of environment * continuation
-  | BX of regionname * environment * continuation
+  | BX of Lang.regionvar * environment * continuation
   | UNBX of environment * continuation
-  | FREERGN of regionname * environment * continuation
+  | FREERGN of Lang.regionvar * environment * continuation
+  | ELIM of Lang.regionvar * environment * continuation
 
   type state = Lang.term * environment * store * continuation
 
-  val lookup : Lang.var * environment -> machinevalue
+  val lookup : Lang.var * environment -> Lang.value
   val step : state -> state
   val runToCompletion : state -> state
 end
@@ -42,19 +43,19 @@ struct
 
   datatype environment = 
     EmptyEnv
-  | Env of var * machinevalue * environment
+  | Env of var * value * environment
 
-  and machinevalue = 
-    MachineInt of int
-  | MachineBool of bool
-  | MachineUnit
-  | MachineTuple of term * term
-  | MachineClosure of var * term * ty * environment
+  datatype heapvalue = 
+    HeapIntLit of int
+  | HeapBoolLit of bool
+  | HeapUnitLit
+  | HeapLambda of Lang.var * Lang.term * Lang.ty
+  | HeapRegionLambda of Lang.regionvar * Lang.abs
+  | HeapTuple of term * term
+  | HeapBarePointer of regionvar * pointername
 
-  type pointername = int
-  type regionname = string
-  type region = machinevalue list
-  type store = (regionname * region) list
+  type region = heapvalue list
+  type store = (regionvar * region) list
 
   datatype continuation =
     Empty
@@ -63,13 +64,14 @@ struct
   | CALL of var * term * environment * continuation
   | LT of var * ty * term * environment * continuation
   | IF of term * term * environment * continuation
-  | TUP1 of term * environment * continuation
-  | TUP2 of term * environment * continuation
+  | TUP1 of regionvar * term * environment * continuation
+  | TUP2 of regionvar * term * environment * continuation
   | FST of environment * continuation
   | SND of environment * continuation
-  | BX of regionname * environment * continuation
+  | BX of regionvar * environment * continuation
   | UNBX of environment * continuation
-  | FREERGN of regionname * environment * continuation
+  | FREERGN of regionvar * environment * continuation
+  | ELIM of regionvar * environment * continuation
 
   type state = term * environment * store * continuation
 
@@ -85,17 +87,22 @@ struct
 
   fun step (c : term, e : environment, s : store, k : continuation) : state = 
     let 
-      fun valueToMValue (Lang.IntLit i) = MachineInt i
-      | valueToMValue (Lang.BoolLit b) = MachineBool b
-      | valueToMValue (Lang.UnitLit) = MachineUnit
-      | valueToMValue (Lang.Lambda (x, m, t)) = MachineClosure (x, m, t, e)
-      | valueToMValue (Lang.Tuple (t1, t2)) = MachineTuple (t1, t2)
+      fun makeHeapValue (BoxIntLit (i, r)) = (r, HeapIntLit i)
+      | makeHeapValue (BoxBoolLit (b, r)) = (r, HeapBoolLit b)
+      | makeHeapValue (BoxUnitLit r) = (r, HeapUnitLit)
+      | makeHeapValue (BoxAbs (Lambda (x, m, argt, r))) = (r, HeapLambda (x, m, argt))
+      | makeHeapValue (BoxAbs (RegionLambda (r, a, r2))) = (r2, HeapRegionLambda (r, a))
+      | makeHeapValue (BoxTuple (m1, m2, r)) = (r, HeapTuple (m1, m2))
+      | makeHeapValue (BoxBarePointer (r, p, r2)) = (r2, HeapBarePointer (r, p))
 
-      fun putStore (r : regionname, v : Lang.value, s : store) : (regionvar * pointername) * store = 
-        case List.partition (fn (x, _) => x = r) s of
-          ([], s') => ((r, 0), (r, [valueToMValue v])::s')
-        | ([(rn, reg)], s') => ((r, List.length reg), (r, reg @ [valueToMValue v])::s')
-        | _ => raise Fail "duplicate region name"
+      fun putStore (bv : boxvalue, s : store) : (regionvar * pointername) * store = 
+        let val (r, v) = makeHeapValue bv
+        in
+          case List.partition (fn (x, _) => x = r) s of
+            ([], s') => ((r, 0), (r, [v])::s')
+          | ([(rn, reg)], s') => ((r, List.length reg), (r, reg @ [v])::s')
+          | _ => raise Fail "duplicate region name"
+        end
     in
       (case c of
         Value (IntLit i) =>
@@ -103,157 +110,201 @@ struct
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
           | PR (opr, e', k') => raise Fail "irrelevant continuation"
-          | CALL (x', m', e', k') => (m', Env (x', MachineInt i, e'), s, k')
-          | LT (x', argt', m', e', k') => (m', Env (x', MachineInt i, e'), s, k')
+          | CALL (x', m', e', k') => (m', Env (x', IntLit i, e'), s, k')
+          | LT (x', argt', m', e', k') => (m', Env (x', IntLit i, e'), s, k')
           | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
-          | TUP1 (m', e', k') => (m', e', s, TUP2 (c, e', k'))
-          | TUP2 (m', e', k') => (Value (Tuple (m', c)), e', s, k')
+          | TUP1 (r, m', e', k') => (m', e', s, TUP2 (r, c, e', k'))
+          | TUP2 (r, m', e', k') => (BoxedValue (BoxTuple (m', c, r)), e', s, k')
           | FST (e', k') => raise Fail "irrelevant continuation"
           | SND (e', k') => raise Fail "irrelevant continuation"
           | BX (r, e', k') =>
-              let val (p, s') = putStore (r, IntLit i, s)
+              let val (p, s') = putStore (BoxIntLit (i, r), s)
               in
-                (Lang.BarePointer p, e', s', k')
+                (Lang.Value (Lang.BarePointer p), e', s', k')
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
+          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
           )
       | Value (BoolLit b) =>
           (case k of
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
           | PR (opr, e', k') => raise Fail "irrelevant continuation"
-          | CALL (x', m', e', k') => (m', Env (x', MachineBool b, e'), s, k')
-          | LT (x', argt', m', e', k') => (m', Env (x', MachineBool b, e'), s, k')
+          | CALL (x', m', e', k') => (m', Env (x', BoolLit b, e'), s, k')
+          | LT (x', argt', m', e', k') => (m', Env (x', BoolLit b, e'), s, k')
           | IF (m1, m2, e', k') => 
               if b then (m1, e', s, k')
               else (m2, e', s, k')
-          | TUP1 (m', e', k') => (m', e', s, TUP2 (c, e', k'))
-          | TUP2 (m', e', k') => (Value (Tuple (m', c)), e', s, k')
+          | TUP1 (r, m', e', k') => (m', e', s, TUP2 (r, c, e', k'))
+          | TUP2 (r, m', e', k') => (BoxedValue (BoxTuple (m', c, r)), e', s, k')
           | FST (e', k') => raise Fail "irrelevant continuation"
           | SND (e', k') => raise Fail "irrelevant continuation"
           | BX (r, e', k') =>
-              let val (p, s') = putStore (r, BoolLit b, s)
+              let val (p, s') = putStore (BoxBoolLit (b, r), s)
               in
-                (Lang.BarePointer p, e', s', k')
+                (Lang.Value (Lang.BarePointer p), e', s', k')
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
+          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
           )
       | Value (UnitLit) =>
           (case k of
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
           | PR (opr, e', k') => raise Fail "irrelevant continuation"
-          | CALL (x', m', e', k') => (m', Env (x', MachineUnit, e'), s, k')
-          | LT (x', argt', m', e', k') => (m', Env (x', MachineUnit, e'), s, k')
+          | CALL (x', m', e', k') => (m', Env (x', UnitLit, e'), s, k')
+          | LT (x', argt', m', e', k') => (m', Env (x', UnitLit, e'), s, k')
           | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
-          | TUP1 (m', e', k') => (m', e', s, TUP2 (c, e', k'))
-          | TUP2 (m', e', k') => (Value (Tuple (m', c)), e', s, k')
+          | TUP1 (r, m', e', k') => (m', e', s, TUP2 (r, c, e', k'))
+          | TUP2 (r, m', e', k') => (BoxedValue (BoxTuple (m', c, r)), e', s, k')
           | FST (e', k') => raise Fail "irrelevant continuation"
           | SND (e', k') => raise Fail "irrelevant continuation"
           | BX (r, e', k') =>
-              let val (p, s') = putStore (r, UnitLit, s)
+              let val (p, s') = putStore (BoxUnitLit r, s)
               in
-                (Lang.BarePointer p, e', s', k')
+                (Lang.Value (Lang.BarePointer p), e', s', k')
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
+          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
           )
-      | Value (Lambda (x, m, argt)) => 
+      | Value (Tuple (m1, m2)) => 
           (case k of
             Empty => (c, e, s, k)
-          | AR (m', e', k') => (m', e', s, CALL (x, m, e, k'))
-          | PR (opr, e', k') => raise Fail "irrelevant continuation"
-          | CALL (x', m', e', k') => (m', Env (x', MachineClosure (x, m, argt, e), e'), s, k')
-          | LT (x', argt', m', e', k') => (m', Env (x', MachineClosure (x, m, argt, e), e'), s, k')
+          | AR (m', e', k') => raise Fail "irrelevant continuation"
+          | PR (opr, e', k') => 
+              (case (m1, m2) of
+                (Value (IntLit i1), Value (IntLit i2)) =>
+                  (case opr of
+                    "+" => (Value (IntLit (i1 + i2)), e', s, k')
+                  | "-" => (Value (IntLit (i1 - i2)), e', s, k')
+                  | "*" => (Value (IntLit (i1 * i2)), e', s, k')
+                  | "<" => (Value (BoolLit (i1 < i2)), e', s, k')
+                  | "=" => (Value (BoolLit (i1 = i2)), e', s, k')
+                  | _ => raise Fail "undefined operator"
+                  )
+              | _ => raise Fail "cannot do prim op on these types"
+              )
+          | CALL (x', m', e', k') => (m', Env (x', Tuple (m1, m2), e'), s, k')
+          | LT (x', argt', m', e', k') => (m', Env (x', Tuple (m1, m2), e'), s, k')
           | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
-          | TUP1 (m', e', k') => (m', e', s, TUP2 (c, e', k'))
-          | TUP2 (m', e', k') => (Value (Tuple (m', c)), e', s, k')
+          | TUP1 (r, m', e', k') => (m', e', s, TUP2 (r, c, e', k'))
+          | TUP2 (r, m', e', k') => (BoxedValue (BoxTuple (m', c, r)), e', s, k')
           | FST (e', k') => raise Fail "irrelevant continuation"
           | SND (e', k') => raise Fail "irrelevant continuation"
-          | BX (r, e', k') =>
-              let val (p, s') = putStore (r, Lambda (x, m, argt), s)
+          | BX (r, e', k') => 
+              let val (p, s') = putStore (BoxTuple (m1, m2, r), s)
               in
-                (Lang.BarePointer p, e', s', k')
+                (Lang.Value (Lang.BarePointer p), e', s', k')
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
+          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
           )
-      | Value (Tuple (m1, m2)) =>
-          if (isValue m1) andalso (isValue m2) then
-            (case k of
-              Empty => (c, e, s, k)
-            | AR (m', e', k') => raise Fail "irrelevant continuation"
-            | PR (opr, e', k') =>
-                (case (m1, m2) of
-                  (Value (IntLit i1), Value (IntLit i2)) =>
-                    (case opr of
-                      "+" => (Value (IntLit (i1 + i2)), e', s, k')
-                    | "-" => (Value (IntLit (i1 - i2)), e', s, k')
-                    | "*" => (Value (IntLit (i1 * i2)), e', s, k')
-                    | "<" => (Value (BoolLit (i1 < i2)), e', s, k')
-                    | "=" => (Value (BoolLit (i1 = i2)), e', s, k')
-                    | _ => raise Fail "undefined operator"
-                    )
-                | _ => raise Fail "cannot do prim op on these types"
-                )
-            | CALL (x', m', e', k') => (m', Env (x', MachineTuple (m1, m2), e'), s, k')
-            | LT (x', argt', m', e', k') => (m', Env (x', MachineTuple (m1, m2), e'), s, k')
-            | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
-            | TUP1 (m', e', k') => (m', e', s, TUP2 (c, e', k'))
-            | TUP2 (m', e', k') => (Value (Tuple (m', c)), e', s, k')
-            | FST (e', k') => (m1, e', s, k')
-            | SND (e', k') => (m2, e', s, k')
-            | BX (r, e', k') =>
-                let val (p, s') = putStore (r, Tuple (m1, m2), s)
-                in
-                  (Lang.BarePointer p, e', s', k')
-                end
-            | UNBX (e', k') => raise Fail "irrelevant continuation"
-            | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-            )
-          else (m1, e, s, TUP1 (m2, e, k))
-      | BoxedValue (v, r) => (Value v, e, s, BX (r, e, k))
-      | BarePointer (r, p) =>
-          (case k of
-            Empty => raise Fail "irrelevant continuation"
-          | AR (m', e', k') => raise Fail "irrelevant continuation"
-          | PR (opr, e', k') => raise Fail "irrelevant continuation"
-          | CALL (x', m', e', k') => raise Fail "irrelevant continuation"
-          | LT (x', argt', m', e', k') => raise Fail "irrelevant continuation"
-          | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
-          | TUP1 (m', e', k') => raise Fail "irrelevant continuation"
-          | TUP2 (m', e', k') => raise Fail "irrelevant continuation"
-          | FST (e', k') => raise Fail "irrelevant continuation"
-          | SND (e', k') => raise Fail "irrelevant continuation"
-          | BX (r, e', k') => raise Fail "irrelevant continuation"
-          | UNBX (e', k') => 
-              (case List.find (fn (x, _) => x = r) s of
-                SOME (rn, mv) => 
+      | Value (BarePointer (r, p)) =>
+          (case List.find (fn (x, _) => x = r) s of
+            SOME (rn, mv) => 
+              (case k of
+                Empty => (c, e, s, k)
+              | AR (m', e', k') => 
                   (case List.nth (mv, p) of
-                    MachineInt i => (Value (IntLit i), e, s, k')
-                  | MachineBool b => (Value (BoolLit b), e, s, k')
-                  | MachineUnit => (Value (UnitLit), e, s, k')
-                  | MachineTuple (m1, m2) => (Value (Tuple (m1, m2)), e, s, k')
-                  | MachineClosure (x, m, argt, e') => (Value (Lambda (x, m, argt)), e', s, k')
+                    HeapIntLit i => raise Fail "cannot AR boxint"
+                  | HeapBoolLit b => raise Fail "cannot AR boxbool"
+                  | HeapUnitLit => raise Fail "cannot AR boxunit"
+                  | HeapLambda (x, m, argt) => (m', e', s, CALL (x, m, e, k'))
+                  | HeapRegionLambda (r2, a) => raise Fail "cannot AR boxreglambda"
+                  | HeapTuple (m1, m2) => raise Fail "cannot AR boxtuple"
+                  | HeapBarePointer (r, p) => raise Fail "cannot AR bp"
                   )
-              | NONE => raise Fail "unknown region")
-          | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-          )
-      | Var v => 
-          (case lookup (v, e) of
-            MachineInt i => (Value (IntLit i), e, s, k)
-          | MachineBool b => (Value (BoolLit b), e, s, k)
-          | MachineUnit => (Value (UnitLit), e, s, k)
-          | MachineTuple (m1, m2) => (Value (Tuple (m1, m2)), e, s, k)
-          | MachineClosure (x, m, argt, e') => (Value (Lambda (x, m, argt)), e', s, k)
-          )
+              | PR (opr, e', k') => 
+                  (case List.nth (mv, p) of
+                    HeapIntLit i => raise Fail "cannot primapp boxint"
+                  | HeapBoolLit b => raise Fail "cannot primapp boxbool"
+                  | HeapUnitLit => raise Fail "cannot primapp boxunit"
+                  | HeapLambda (x, m, argt) => raise Fail "cannot primapp boxlambda"
+                  | HeapRegionLambda (r2, a) => raise Fail "cannot primapp boxreglambda"
+                  | HeapTuple (m1, m2) => 
+                      (case (m1, m2) of
+                        (Value (IntLit i1), Value (IntLit i2)) =>
+                          (case opr of
+                            "+" => (Value (IntLit (i1 + i2)), e', s, k')
+                          | "-" => (Value (IntLit (i1 - i2)), e', s, k')
+                          | "*" => (Value (IntLit (i1 * i2)), e', s, k')
+                          | "<" => (Value (BoolLit (i1 < i2)), e', s, k')
+                          | "=" => (Value (BoolLit (i1 = i2)), e', s, k')
+                          | _ => raise Fail "undefined operator"
+                          )
+                      | _ => raise Fail "cannot do prim op on these types"
+                      )
+                  | HeapBarePointer (r, p) => raise Fail "cannot primapp boxabs"
+                  )
+              | CALL (x', m', e', k') => (m', Env (x', BarePointer (r, p), e'), s, k')
+              | LT (x', argt', m', e', k') => (m', Env (x', BarePointer (r, p), e'), s, k')
+              | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
+              | TUP1 (r, m', e', k') => (m', e', s, TUP2 (r, c, e', k'))
+              | TUP2 (r, m', e', k') => (BoxedValue (BoxTuple (m', c, r)), e', s, k')
+              | FST (e', k') => 
+                  (case List.nth (mv, p) of
+                    HeapIntLit i => raise Fail "cannot fst boxint"
+                  | HeapBoolLit b => raise Fail "cannot fst boxbool"
+                  | HeapUnitLit => raise Fail "cannot fst boxunit"
+                  | HeapLambda (x, m, argt) => raise Fail "cannot fst boxlambda"
+                  | HeapRegionLambda (r2, a) => raise Fail "cannot fst boxreglambda"
+                  | HeapTuple (m1, m2) => (m1, e', s, k')
+                  | HeapBarePointer (r, p) => raise Fail "cannot fst boxabs"
+                  )
+              | SND (e', k') => 
+                  (case List.nth (mv, p) of
+                    HeapIntLit i => raise Fail "cannot snd boxint"
+                  | HeapBoolLit b => raise Fail "cannot snd boxbool"
+                  | HeapUnitLit => raise Fail "cannot snd boxunit"
+                  | HeapLambda (x, m, argt) => raise Fail "cannot snd boxlambda"
+                  | HeapRegionLambda (r2, a) => raise Fail "cannot snd boxreglambda"
+                  | HeapTuple (m1, m2) => (m2, e', s, k')
+                  | HeapBarePointer (r, p) => raise Fail "cannot snd boxabs"
+                  )
+              | BX (r2, e', k') => 
+                  let val (p, s') = putStore (BoxBarePointer (r, p, r2), s)
+                  in
+                    (Lang.Value (Lang.BarePointer p), e', s', k')
+                  end
+              | UNBX (e', k') => 
+                  (case List.nth (mv, p) of
+                    HeapIntLit i => (Value (IntLit i), e, s, k)
+                  | HeapBoolLit b => (Value (BoolLit b), e, s, k)
+                  | HeapUnitLit => (Value (UnitLit), e, s, k)
+                  | HeapLambda (x, m, argt) => raise Fail "cannot unbox boxlambda"
+                  | HeapRegionLambda (r2, a) => raise Fail "cannot unbox boxreglambda"
+                  | HeapTuple (m1, m2) => raise Fail "cannot unbox tuple"
+                  | HeapBarePointer (r, p) => (Value (BarePointer (r, p)), e, s, k)
+                  )
+              | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
+              | ELIM (r1, e', k') => 
+                  (case List.nth (mv, p) of
+                    HeapIntLit i => raise Fail "cannot elim boxint"
+                  | HeapBoolLit b => raise Fail "cannot elim boxbool"
+                  | HeapUnitLit => raise Fail "cannot elim boxunit"
+                  | HeapLambda (x, m, argt) => raise Fail "cannot elim boxlambda"
+                  | HeapRegionLambda (r2, a) => (BoxedValue (BoxAbs (substRegVarAbs (r2, r1) a)), e', s, k')
+                  | HeapTuple (m1, m2) => raise Fail "cannot elim boxtuple"
+                  | HeapBarePointer (r, p) => raise Fail "cannot elim boxabs"
+                  )
+              )
+          | NONE => raise Fail "unknown region")
+      | BoxedValue v => 
+          let val (bp, s')  = putStore (v, s)
+          in
+            (Value (BarePointer bp), e, s', k)
+          end
+      | Var v => (Value (lookup (v, e)), e, s, k)
       | First (m) => (m, e, s, FST (e, k))
       | Second (m) => (m, e, s, SND (e, k))
       | Unbox (m) => (m, e, s, UNBX (e, k))
       | Let (x, m1, m2, argt) => (m1, e, s, LT (x, argt, m2, e, k))
       | LetRegion (r, m) => (m, e, s, FREERGN (r, e, k))
+      | RegionElim (m, r) => (m, e, s, ELIM (r, e, k))
       | IfElse (m1, m2, m3) => (m1, e, s, IF (m2, m3, e, k))
       | App (m1, m2) => (m1, e, s, AR (m2, e, k))
       | PrimApp (opr, m) => (m, e, s, PR (opr, e, k))

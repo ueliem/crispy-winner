@@ -124,10 +124,18 @@ struct
     ))
   and tyterm () = typrec_parse 0
 
+  fun regionannotation () =
+    keyword (Tokenizer.At) >>= (fn _ =>
+    ident () >>= (fn x =>
+      return x
+    ))
+
   fun atom () =
     parenterm ()
     ++ abstraction ()
+    ++ ifelseterm ()
     ++ letterm ()
+    ++ letregion ()
     ++ pair ()
     ++ fst ()
     ++ snd ()
@@ -153,8 +161,11 @@ struct
     comma () >>= (fn _ =>
     term () >>= (fn y =>
     rpar () >>= (fn _ =>
-      return (Lang.Value (Lang.Tuple (x, y)))
-    )))))
+    optional (regionannotation ()) >>= (fn a =>
+      (case a of
+        SOME r => return (Lang.BoxedValue (Lang.BoxTuple (x, y, r)))
+      | NONE => return (Lang.Value (Lang.Tuple (x, y))))
+    ))))))
   and fst () = 
     keyword (Tokenizer.First) >>= (fn _ =>
     term () >>= (fn x =>
@@ -166,15 +177,24 @@ struct
       return (Lang.Second x)
     ))
   and literal () = 
-    integer () >>= (fn i =>
-      return (Lang.Value (Lang.IntLit i))
-    ) ++
-    keyword (Tokenizer.True) >>= (fn _ =>
-      return (Lang.Value (Lang.BoolLit true))
-    ) ++
-    keyword (Tokenizer.False) >>= (fn _ =>
-      return (Lang.Value (Lang.BoolLit false))
-    )
+    (integer () >>= (fn i =>
+    optional (regionannotation ()) >>= (fn a =>
+      (case a of
+        SOME r => return (Lang.BoxedValue (Lang.BoxIntLit (i, r)))
+      | NONE => return (Lang.Value (Lang.IntLit i))
+    )))) ++ 
+    (keyword (Tokenizer.True) >>= (fn _ =>
+    optional (regionannotation ()) >>= (fn a =>
+      (case a of
+        SOME r => return (Lang.BoxedValue (Lang.BoxBoolLit (true, r)))
+      | NONE => return (Lang.Value (Lang.BoolLit true))
+    )))) ++
+    (keyword (Tokenizer.False) >>= (fn _ =>
+    optional (regionannotation ()) >>= (fn a =>
+      (case a of
+        SOME r => return (Lang.BoxedValue (Lang.BoxBoolLit (false, r)))
+      | NONE => return (Lang.Value (Lang.BoolLit false))
+    ))))
   and application () =
     atom () >>= (fn x =>
     many (atom ()) >>= (fn apps =>
@@ -187,7 +207,19 @@ struct
     tyterm () >>= (fn y =>
     rightarrow () >>= (fn _ =>
     term () >>= (fn e =>
-      return (Lang.Value (Lang.Lambda (x, e, y)))
+    optional (regionannotation ()) >>= (fn a =>
+      (case a of
+        SOME r => return (Lang.BoxedValue (Lang.BoxAbs (Lang.Lambda (x, e, y, r))))
+      | NONE => raise Fail "abstraction requires region"
+    ))))))))
+  and ifelseterm () =
+    keyword (Tokenizer.If) >>= (fn _ =>
+    term () >>= (fn x =>
+    keyword (Tokenizer.Then) >>= (fn _ =>
+    term () >>= (fn y =>
+    keyword (Tokenizer.Else) >>= (fn _ =>
+    term () >>= (fn z =>
+      return (Lang.IfElse (x, y, z))
     ))))))
   and letterm () =
     keyword (Tokenizer.Let) >>= (fn _ =>
@@ -201,6 +233,14 @@ struct
     keyword (Tokenizer.End) >>= (fn _ =>
       return (Lang.Let (x, y, z, t))
     )))))))))
+  and letregion () =
+    keyword (Tokenizer.LetRegion) >>= (fn _ =>
+    ident () >>= (fn x =>
+    keyword (Tokenizer.In) >>= (fn _ =>
+    term () >>= (fn y =>
+    keyword (Tokenizer.End) >>= (fn _ =>
+      return (Lang.LetRegion (x, y))
+    )))))
   and primapp () = prec_parse 0
   and operator () =
     symbol Tokenizer.Plus >>= (fn x => return "+")
