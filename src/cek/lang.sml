@@ -51,7 +51,7 @@ structure Lang : sig
   | RegionElim of term * regionvar
   | IfElse of term * term * term
   | App of term * term
-  | PrimApp of operator * term
+  | PrimApp of operator * term * term
 
   val substRegVarBoxTy : (regionvar * regionvar) -> boxty -> boxty
   val substRegVarTy : (regionvar * regionvar) -> ty -> ty
@@ -116,7 +116,7 @@ struct
   | RegionElim of term * regionvar
   | IfElse of term * term * term
   | App of term * term
-  | PrimApp of operator * term
+  | PrimApp of operator * term * term
 
   fun substRegVarBoxTy (dst, newr) (BoxIntTy rho) = 
       BoxIntTy (if dst = rho then newr else rho)
@@ -166,8 +166,8 @@ struct
       RegionElim (substRegVar (dst, newr) m, r)
   | substRegVar (dst, newr) (App (m1, m2)) = 
       App (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
-  | substRegVar (dst, newr) (PrimApp (opr, m)) = 
-      PrimApp (opr, substRegVar (dst, newr) m)
+  | substRegVar (dst, newr) (PrimApp (opr, m1, m2)) = 
+      PrimApp (opr, substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
 
   and substRegVarValue (dst, newr) (IntLit i) = IntLit i
   | substRegVarValue (dst, newr) (BoolLit b) = BoolLit b

@@ -2,6 +2,25 @@
 
 ## Introduction
 
+This is a functional systems language
+
+- Region based memory management
+- 
+
+##Compiler Passes
+
+- Parsing to abstract syntax tree
+- Typechecking
+- Conversion to A-normal form
+- Conversion to SSA
+- Conversion to Typed ASM
+- Conversion to NASM
+
+
+# Old Version
+
+## Introduction
+
 This is a functional systems language. 
 
 - Pure Type System

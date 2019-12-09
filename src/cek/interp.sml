@@ -18,7 +18,8 @@ structure Interp : sig
   datatype continuation =
     Empty
   | AR of Lang.term * environment * continuation
-  | PR of Lang.operator * environment * continuation
+  | PR1 of Lang.operator * Lang.term * environment * continuation
+  | PR2 of Lang.operator * Lang.term * environment * continuation
   | CALL of Lang.var * Lang.term * environment * continuation
   | LT of Lang.var * Lang.ty * Lang.term * environment * continuation
   | IF of Lang.term * Lang.term * environment * continuation
@@ -34,6 +35,8 @@ structure Interp : sig
   type state = Lang.term * environment * store * continuation
 
   val lookup : Lang.var * environment -> Lang.value
+  val removeRegion : (Lang.regionvar * store) -> store
+  val doOperation : (Lang.operator * Lang.term * Lang.term) -> Lang.term
   val step : state -> state
   val runToCompletion : state -> state
 end
@@ -60,7 +63,8 @@ struct
   datatype continuation =
     Empty
   | AR of term * environment * continuation
-  | PR of operator * environment * continuation
+  | PR1 of operator * term * environment * continuation
+  | PR2 of operator * term * environment * continuation
   | CALL of var * term * environment * continuation
   | LT of var * ty * term * environment * continuation
   | IF of term * term * environment * continuation
@@ -84,6 +88,20 @@ struct
   | removeRegion (r, (rn, reg)::s) =
       if r = rn then s
       else (rn, reg)::(removeRegion (r, s))
+
+  fun doOperation (opr, m1, m2) =
+    (case (m1, m2) of
+      (Value (IntLit i1), Value (IntLit i2)) =>
+        (case opr of
+          "+" => Value (IntLit (i1 + i2))
+        | "-" => Value (IntLit (i1 - i2))
+        | "*" => Value (IntLit (i1 * i2))
+        | "<" => Value (BoolLit (i1 < i2))
+        | "=" => Value (BoolLit (i1 = i2))
+        | _ => raise Fail "undefined operator"
+        )
+    | _ => raise Fail "cannot do prim op on these types"
+    )
 
   fun step (c : term, e : environment, s : store, k : continuation) : state = 
     let 
@@ -109,7 +127,8 @@ struct
           (case k of
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
-          | PR (opr, e', k') => raise Fail "irrelevant continuation"
+          | PR1 (opr, m, e', k') => (m, e', s, PR2 (opr, c, e', k'))
+          | PR2 (opr, m, e', k') => (doOperation (opr, m, c), e', s, k')
           | CALL (x', m', e', k') => (m', Env (x', IntLit i, e'), s, k')
           | LT (x', argt', m', e', k') => (m', Env (x', IntLit i, e'), s, k')
           | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
@@ -130,7 +149,8 @@ struct
           (case k of
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
-          | PR (opr, e', k') => raise Fail "irrelevant continuation"
+          | PR1 (opr, m, e', k') => (m, e', s, PR2 (opr, c, e', k'))
+          | PR2 (opr, m, e', k') => (doOperation (opr, m, c), e', s, k')
           | CALL (x', m', e', k') => (m', Env (x', BoolLit b, e'), s, k')
           | LT (x', argt', m', e', k') => (m', Env (x', BoolLit b, e'), s, k')
           | IF (m1, m2, e', k') => 
@@ -153,7 +173,8 @@ struct
           (case k of
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
-          | PR (opr, e', k') => raise Fail "irrelevant continuation"
+          | PR1 (opr, m, e', k') => raise Fail "irrelevant continuation"
+          | PR2 (opr, m, e', k') => raise Fail "irrelevant continuation"
           | CALL (x', m', e', k') => (m', Env (x', UnitLit, e'), s, k')
           | LT (x', argt', m', e', k') => (m', Env (x', UnitLit, e'), s, k')
           | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
@@ -174,19 +195,8 @@ struct
           (case k of
             Empty => (c, e, s, k)
           | AR (m', e', k') => raise Fail "irrelevant continuation"
-          | PR (opr, e', k') => 
-              (case (m1, m2) of
-                (Value (IntLit i1), Value (IntLit i2)) =>
-                  (case opr of
-                    "+" => (Value (IntLit (i1 + i2)), e', s, k')
-                  | "-" => (Value (IntLit (i1 - i2)), e', s, k')
-                  | "*" => (Value (IntLit (i1 * i2)), e', s, k')
-                  | "<" => (Value (BoolLit (i1 < i2)), e', s, k')
-                  | "=" => (Value (BoolLit (i1 = i2)), e', s, k')
-                  | _ => raise Fail "undefined operator"
-                  )
-              | _ => raise Fail "cannot do prim op on these types"
-              )
+          | PR1 (opr, m, e', k') => raise Fail "irrelevant continuation"
+          | PR2 (opr, m, e', k') => raise Fail "irrelevant continuation"
           | CALL (x', m', e', k') => (m', Env (x', Tuple (m1, m2), e'), s, k')
           | LT (x', argt', m', e', k') => (m', Env (x', Tuple (m1, m2), e'), s, k')
           | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
@@ -218,28 +228,8 @@ struct
                   | HeapTuple (m1, m2) => raise Fail "cannot AR boxtuple"
                   | HeapBarePointer (r, p) => raise Fail "cannot AR bp"
                   )
-              | PR (opr, e', k') => 
-                  (case List.nth (mv, p) of
-                    HeapIntLit i => raise Fail "cannot primapp boxint"
-                  | HeapBoolLit b => raise Fail "cannot primapp boxbool"
-                  | HeapUnitLit => raise Fail "cannot primapp boxunit"
-                  | HeapLambda (x, m, argt) => raise Fail "cannot primapp boxlambda"
-                  | HeapRegionLambda (r2, a) => raise Fail "cannot primapp boxreglambda"
-                  | HeapTuple (m1, m2) => 
-                      (case (m1, m2) of
-                        (Value (IntLit i1), Value (IntLit i2)) =>
-                          (case opr of
-                            "+" => (Value (IntLit (i1 + i2)), e', s, k')
-                          | "-" => (Value (IntLit (i1 - i2)), e', s, k')
-                          | "*" => (Value (IntLit (i1 * i2)), e', s, k')
-                          | "<" => (Value (BoolLit (i1 < i2)), e', s, k')
-                          | "=" => (Value (BoolLit (i1 = i2)), e', s, k')
-                          | _ => raise Fail "undefined operator"
-                          )
-                      | _ => raise Fail "cannot do prim op on these types"
-                      )
-                  | HeapBarePointer (r, p) => raise Fail "cannot primapp boxabs"
-                  )
+              | PR1 (opr, m, e', k') => raise Fail "irrelevant continuation"
+              | PR2 (opr, m, e', k') => raise Fail "irrelevant continuation"
               | CALL (x', m', e', k') => (m', Env (x', BarePointer (r, p), e'), s, k')
               | LT (x', argt', m', e', k') => (m', Env (x', BarePointer (r, p), e'), s, k')
               | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
@@ -307,7 +297,7 @@ struct
       | RegionElim (m, r) => (m, e, s, ELIM (r, e, k))
       | IfElse (m1, m2, m3) => (m1, e, s, IF (m2, m3, e, k))
       | App (m1, m2) => (m1, e, s, AR (m2, e, k))
-      | PrimApp (opr, m) => (m, e, s, PR (opr, e, k))
+      | PrimApp (opr, m1, m2) => (m1, e, s, PR1 (opr, m2, e, k))
       )
     end
 

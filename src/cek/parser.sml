@@ -289,7 +289,7 @@ struct
     many (prec_helper level) >>= (fn brhsl =>
       return
         (foldl 
-          (fn ((b, rhs), lhs) => Lang.PrimApp (b, Lang.Value (Lang.Tuple (lhs, rhs))))
+          (fn ((b, rhs), lhs) => Lang.PrimApp (b, lhs, rhs))
           lhs brhsl)
     ))
 

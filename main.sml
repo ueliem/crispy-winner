@@ -9,12 +9,16 @@ use "src/cek/interp.sml";
 use "src/cek/tokenizer.sml";
 use "src/cek/parser.sml";
 
+use "src/anf/anf.sml";
+
 open Lang
 open Interp
 
 val prog = App (BoxedValue (BoxAbs (Lambda ("x", Var "x", IntTy, "r"))), Value (IntLit 7))
 (* val prog = Lambda ("x", Var "x", IntTy) *)
-val seq = "fn x : int => x + 1"
+val seq = "fn x : int => (x + 1) at r"
+
+val seq1 = "snd (x + y + z)"
 
 fun main () =
 let
@@ -22,10 +26,17 @@ let
   val _ = PolyML.print prog
   val initstate = (prog, EmptyEnv, [], Empty)
   val _ = PolyML.print initstate
-  val _ = PolyML.print (TypeCheck.check [] [] prog { errs = [] })
+  val _ = PolyML.print (TypeCheck.runCheck prog)
   val _ = PolyML.print (runToCompletion initstate)
 
   val contents : CharVector.vector = seq
+  val _ = PolyML.print contents
+  val t = Tokenizer.tokenize { pos = 0, s = contents }
+  val _ = PolyML.print t
+  val syn = SyntaxParser.term () t
+  val _ = PolyML.print syn
+
+  val contents : CharVector.vector = seq1
   val _ = PolyML.print contents
   val t = Tokenizer.tokenize { pos = 0, s = contents }
   val _ = PolyML.print t
@@ -36,8 +47,9 @@ let
     TParser.Ok (s, _) => 
     let
       val initstate1 = (s, EmptyEnv, [], Empty)
+      val _ = PolyML.print (ANF.transformTerm s)
       val _ = PolyML.print initstate1
-      val _ = PolyML.print (TypeCheck.check [] [] s { errs = [] })
+      val _ = PolyML.print (TypeCheck.runCheck s)
       val _ = PolyML.print (runToCompletion initstate1)
     in
       ()

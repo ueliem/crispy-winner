@@ -21,6 +21,7 @@ structure TypeCheck : sig
   val checkValue : typeenv -> regionenv -> Lang.value -> (Lang.ty * Lang.effect) TypeCheckMonad.monad
   val checkBoxValue : typeenv -> regionenv -> Lang.boxvalue -> (Lang.boxty * Lang.effect) TypeCheckMonad.monad
   val checkAbs : typeenv -> regionenv -> Lang.abs -> (Lang.boxty * Lang.effect) TypeCheckMonad.monad
+  val runCheck : Lang.term -> (Lang.ty * Lang.effect) option * typestate
 end
 =
 struct
@@ -106,20 +107,21 @@ struct
             else failCheck (EmptyError)
         | _ => failCheck (EmptyError))
       ))
-  | check tyenv regenv (Lang.PrimApp (opr, m)) = 
-      check tyenv regenv m >>= (fn (t, phi) =>
-        (case t of
-          Lang.BoxedTy (Lang.BoxTupleTy (Lang.IntTy, Lang.IntTy, r)) => 
+  | check tyenv regenv (Lang.PrimApp (opr, m1, m2)) = 
+      check tyenv regenv m1 >>= (fn (t1, phi1) =>
+      check tyenv regenv m2 >>= (fn (t2, phi2) =>
+        (case (t1, t2) of
+          (Lang.IntTy, Lang.IntTy) => 
             (case opr of
-              "+" => return (Lang.IntTy, Set.insert r phi)
-            | "-" => return (Lang.IntTy, Set.insert r phi)
-            | "*" => return (Lang.IntTy, Set.insert r phi)
-            | "<" => return (Lang.BoolTy, Set.insert r phi)
-            | "=" => return (Lang.BoolTy, Set.insert r phi)
+              "+" => return (Lang.IntTy, Set.union phi1 phi2)
+            | "-" => return (Lang.IntTy, Set.union phi1 phi2)
+            | "*" => return (Lang.IntTy, Set.union phi1 phi2)
+            | "<" => return (Lang.BoolTy, Set.union phi1 phi2)
+            | "=" => return (Lang.BoolTy, Set.union phi1 phi2)
             | _ => raise Fail "undefined operator"
             )
         | _ => failCheck (EmptyError))
-      )
+      ))
 
   and checkValue tyenv regenv (Lang.IntLit i) = return (Lang.IntTy, [])
   | checkValue tyenv regenv (Lang.BoolLit b) = return (Lang.BoolTy, [])
@@ -160,6 +162,9 @@ struct
         return (Lang.BoxRegFuncTy (r, Lang.BoxedTy t, phi, rho), [rho])
       else failCheck (EmptyError)
       )
+
+  fun runCheck prog = 
+    (M.runState (check [] [] prog) { errs = [] })
 
 end
 
