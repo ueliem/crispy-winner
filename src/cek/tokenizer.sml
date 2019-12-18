@@ -5,6 +5,8 @@ sig
   | Integer of int
   | KWInt
   | KWBool
+  | KWUnit
+  | KWBoxed
   | True
   | False
   | First
@@ -23,8 +25,11 @@ sig
   | If
   | Then
   | Else
+  | UnitSymbol
   | LPar
   | RPar
+  | LCurly
+  | RCurly
   | Plus
   | Dash
   | Star
@@ -48,6 +53,7 @@ sig
   val whitespace : unit -> char list CParser.Parser
   val word : unit -> token CParser.Parser
   val integer : unit -> token CParser.Parser
+  val unitsymbol : unit -> token CParser.Parser
   val lpar : unit -> token CParser.Parser
   val rpar : unit -> token CParser.Parser
   val sym : unit -> token CParser.Parser
@@ -61,6 +67,8 @@ struct
   | Integer of int
   | KWInt
   | KWBool
+  | KWUnit
+  | KWBoxed
   | True
   | False
   | First
@@ -79,8 +87,11 @@ struct
   | If
   | Then
   | Else
+  | UnitSymbol
   | LPar
   | RPar
+  | LCurly
+  | RCurly
   | Plus
   | Dash
   | Star
@@ -144,6 +155,12 @@ struct
       return (Integer (Option.valOf (Int.fromString (String.implode x))))
     )
 
+  fun unitsymbol () : token Parser =
+    CharParser.lpar () >>= (fn x =>
+    CharParser.rpar () >>= (fn y =>
+      return UnitSymbol
+    ))
+
   fun lpar () : token Parser =
     CharParser.lpar () >>= (fn x =>
       return LPar
@@ -152,6 +169,16 @@ struct
   fun rpar () : token Parser =
     CharParser.rpar () >>= (fn x =>
       return RPar
+    )
+
+  fun lcurly () : token Parser =
+    CharParser.lcurly () >>= (fn x =>
+      return LCurly
+    )
+
+  fun rcurly () : token Parser =
+    CharParser.rcurly () >>= (fn x =>
+      return RCurly
     )
 
   fun comma () : token Parser =
@@ -182,8 +209,11 @@ struct
   fun tok () : token Parser =
     (word ()
     ++ integer ()
+    ++ unitsymbol ()
     ++ lpar ()
     ++ rpar ()
+    ++ lcurly ()
+    ++ rcurly ()
     ++ sym ())
     >>= (fn x =>
     whitespace () >>= (fn _ =>

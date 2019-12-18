@@ -36,7 +36,7 @@ let
   val syn = SyntaxParser.term () t
   val _ = PolyML.print syn
 
-  val contents : CharVector.vector = seq1
+  val contents : CharVector.vector = seq
   val _ = PolyML.print contents
   val t = Tokenizer.tokenize { pos = 0, s = contents }
   val _ = PolyML.print t

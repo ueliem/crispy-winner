@@ -75,17 +75,19 @@ struct
       check tyenv (r::regenv) m >>= (fn (t, phi) =>
         return (t, Set.remove r phi)
       )
-  | check tyenv regenv (Lang.RegionElim (m, r1)) = 
-      check tyenv regenv m >>= (fn (t, phi1) =>
-        (case t of
-          Lang.BoxedTy (Lang.BoxRegFuncTy (r3, t', phi2, r2)) => 
-            if List.exists (fn x => x = r1) regenv then
-              return (Lang.substRegVarTy (r3, r1) t', 
-                Set.insert r2 (Set.union phi1 (map (fn r => if r3 = r then r1 else r) phi2))
-              )
-            else failCheck (EmptyError)
-        | _ => failCheck (EmptyError)
-        )
+  | check tyenv regenv (Lang.RegionElim (f, r1, r2)) = 
+      (case List.find (fn x => #1 x = f) tyenv of
+        SOME (_, t) => 
+          (case t of
+            Lang.BoxedTy (Lang.BoxRegFuncTy (r4, t', phi1, r3)) => 
+              if List.exists (fn x => x = r1) regenv then
+                return (Lang.substRegVarTy (r4, r1) t', 
+                  Set.insert r1 (Set.insert r2 (Set.insert r3 (Set.remove r4 phi1)))
+                )
+              else failCheck (EmptyError)
+          | _ => failCheck (EmptyError)
+          )
+      | NONE => failCheck (VarNotInEnv f)
       )
   | check tyenv regenv (Lang.IfElse (m1, m2, m3)) = 
       check tyenv regenv m1 >>= (fn (t1, phi1) =>
@@ -126,11 +128,6 @@ struct
   and checkValue tyenv regenv (Lang.IntLit i) = return (Lang.IntTy, [])
   | checkValue tyenv regenv (Lang.BoolLit b) = return (Lang.BoolTy, [])
   | checkValue tyenv regenv (Lang.UnitLit) = return (Lang.UnitTy, [])
-  | checkValue tyenv regenv (Lang.Tuple (m1, m2)) = 
-      check tyenv regenv m1 >>= (fn (t1, phi1) =>
-      check tyenv regenv m2 >>= (fn (t2, phi2) =>
-        return (Lang.TupleTy (t1, t2), Set.union phi1 phi2)
-      ))
   | checkValue tyenv regenv (Lang.BarePointer (r, p)) = 
       raise Fail "not known at compile time"
 

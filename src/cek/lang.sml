@@ -17,7 +17,6 @@ structure Lang : sig
     IntTy
   | BoolTy
   | UnitTy
-  | TupleTy of ty * ty
   | BoxedTy of boxty
 
   datatype abs = 
@@ -28,7 +27,6 @@ structure Lang : sig
     IntLit of int
   | BoolLit of bool
   | UnitLit
-  | Tuple of term * term
   | BarePointer of regionvar * pointername
 
   and boxvalue = 
@@ -48,7 +46,7 @@ structure Lang : sig
   | Unbox of term
   | Let of var * term * term * ty
   | LetRegion of regionvar * term
-  | RegionElim of term * regionvar
+  | RegionElim of var * regionvar * regionvar
   | IfElse of term * term * term
   | App of term * term
   | PrimApp of operator * term * term
@@ -82,7 +80,6 @@ struct
     IntTy
   | BoolTy
   | UnitTy
-  | TupleTy of ty * ty
   | BoxedTy of boxty
 
   datatype abs = 
@@ -93,7 +90,6 @@ struct
     IntLit of int
   | BoolLit of bool
   | UnitLit
-  | Tuple of term * term
   | BarePointer of regionvar * pointername
 
   and boxvalue = 
@@ -113,7 +109,7 @@ struct
   | Unbox of term
   | Let of var * term * term * ty
   | LetRegion of regionvar * term
-  | RegionElim of term * regionvar
+  | RegionElim of var * regionvar * regionvar
   | IfElse of term * term * term
   | App of term * term
   | PrimApp of operator * term * term
@@ -141,8 +137,6 @@ struct
   and substRegVarTy (dst, newr) (IntTy) = IntTy
   | substRegVarTy (dst, newr) (BoolTy) = BoolTy
   | substRegVarTy (dst, newr) (UnitTy) = UnitTy
-  | substRegVarTy (dst, newr) (TupleTy (t1, t2)) = 
-      TupleTy (substRegVarTy (dst, newr) t1, substRegVarTy (dst, newr) t2)
   | substRegVarTy (dst, newr) (BoxedTy t) = 
       BoxedTy (substRegVarBoxTy (dst, newr) t)
 
@@ -162,8 +156,8 @@ struct
       LetRegion (r, substRegVar (dst, newr) m)
   | substRegVar (dst, newr) (IfElse (m1, m2, m3)) = 
       IfElse (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2, substRegVar (dst, newr) m3)
-  | substRegVar (dst, newr) (RegionElim (m, r)) = 
-      RegionElim (substRegVar (dst, newr) m, r)
+  | substRegVar (dst, newr) (RegionElim (f, r1, r2)) = 
+      RegionElim (f, if dst = r1 then newr else r1, if dst = r2 then newr else r2)
   | substRegVar (dst, newr) (App (m1, m2)) = 
       App (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
   | substRegVar (dst, newr) (PrimApp (opr, m1, m2)) = 
@@ -172,8 +166,6 @@ struct
   and substRegVarValue (dst, newr) (IntLit i) = IntLit i
   | substRegVarValue (dst, newr) (BoolLit b) = BoolLit b
   | substRegVarValue (dst, newr) (UnitLit) = UnitLit
-  | substRegVarValue (dst, newr) (Tuple (m1, m2)) = 
-      Tuple (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
   | substRegVarValue (dst, newr) (BarePointer (r, p)) = (BarePointer (r, p))
 
   and substRegVarBoxValue (dst, newr) (BoxIntLit (i, r)) = BoxIntLit (i, if dst = r then newr else r)

@@ -30,7 +30,7 @@ structure Interp : sig
   | BX of Lang.regionvar * environment * continuation
   | UNBX of environment * continuation
   | FREERGN of Lang.regionvar * environment * continuation
-  | ELIM of Lang.regionvar * environment * continuation
+  | ELIM of Lang.regionvar * Lang.regionvar * environment * continuation
 
   type state = Lang.term * environment * store * continuation
 
@@ -75,7 +75,7 @@ struct
   | BX of regionvar * environment * continuation
   | UNBX of environment * continuation
   | FREERGN of regionvar * environment * continuation
-  | ELIM of regionvar * environment * continuation
+  | ELIM of regionvar * regionvar * environment * continuation
 
   type state = term * environment * store * continuation
 
@@ -143,7 +143,7 @@ struct
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
+          | ELIM (r1, r2, e', k') => raise Fail "irrelevant continuation"
           )
       | Value (BoolLit b) =>
           (case k of
@@ -167,7 +167,7 @@ struct
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
+          | ELIM (r1, r2, e', k') => raise Fail "irrelevant continuation"
           )
       | Value (UnitLit) =>
           (case k of
@@ -189,29 +189,7 @@ struct
               end
           | UNBX (e', k') => raise Fail "irrelevant continuation"
           | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
-          )
-      | Value (Tuple (m1, m2)) => 
-          (case k of
-            Empty => (c, e, s, k)
-          | AR (m', e', k') => raise Fail "irrelevant continuation"
-          | PR1 (opr, m, e', k') => raise Fail "irrelevant continuation"
-          | PR2 (opr, m, e', k') => raise Fail "irrelevant continuation"
-          | CALL (x', m', e', k') => (m', Env (x', Tuple (m1, m2), e'), s, k')
-          | LT (x', argt', m', e', k') => (m', Env (x', Tuple (m1, m2), e'), s, k')
-          | IF (m1, m2, e', k') => raise Fail "irrelevant continuation"
-          | TUP1 (r, m', e', k') => (m', e', s, TUP2 (r, c, e', k'))
-          | TUP2 (r, m', e', k') => (BoxedValue (BoxTuple (m', c, r)), e', s, k')
-          | FST (e', k') => raise Fail "irrelevant continuation"
-          | SND (e', k') => raise Fail "irrelevant continuation"
-          | BX (r, e', k') => 
-              let val (p, s') = putStore (BoxTuple (m1, m2, r), s)
-              in
-                (Lang.Value (Lang.BarePointer p), e', s', k')
-              end
-          | UNBX (e', k') => raise Fail "irrelevant continuation"
-          | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-          | ELIM (r, e', k') => raise Fail "irrelevant continuation"
+          | ELIM (r1, r2, e', k') => raise Fail "irrelevant continuation"
           )
       | Value (BarePointer (r, p)) =>
           (case List.find (fn (x, _) => x = r) s of
@@ -271,13 +249,19 @@ struct
                   | HeapBarePointer (r, p) => (Value (BarePointer (r, p)), e, s, k)
                   )
               | FREERGN (r, e', k') => (c, e', removeRegion (r, s), k')
-              | ELIM (r1, e', k') => 
+              | ELIM (r1, r2, e', k') => 
                   (case List.nth (mv, p) of
                     HeapIntLit i => raise Fail "cannot elim boxint"
                   | HeapBoolLit b => raise Fail "cannot elim boxbool"
                   | HeapUnitLit => raise Fail "cannot elim boxunit"
                   | HeapLambda (x, m, argt) => raise Fail "cannot elim boxlambda"
-                  | HeapRegionLambda (r2, a) => (BoxedValue (BoxAbs (substRegVarAbs (r2, r1) a)), e', s, k')
+                  | HeapRegionLambda (r3, a) => 
+                      (case a of 
+                        Lambda (x, m, argt, r4) => 
+                          (BoxedValue (BoxAbs (Lambda (x, substRegVar (r3, r1) m, argt, r2))), e', s, k')
+                      | RegionLambda (r4, m, r5) =>
+                          (BoxedValue (BoxAbs (RegionLambda (r4, substRegVarAbs (r3, r1) m, r2))), e', s, k')
+                      )
                   | HeapTuple (m1, m2) => raise Fail "cannot elim boxtuple"
                   | HeapBarePointer (r, p) => raise Fail "cannot elim boxabs"
                   )
@@ -294,7 +278,7 @@ struct
       | Unbox (m) => (m, e, s, UNBX (e, k))
       | Let (x, m1, m2, argt) => (m1, e, s, LT (x, argt, m2, e, k))
       | LetRegion (r, m) => (m, e, s, FREERGN (r, e, k))
-      | RegionElim (m, r) => (m, e, s, ELIM (r, e, k))
+      | RegionElim (f, r1, r2) => (Var f, e, s, ELIM (r1, r2, e, k))
       | IfElse (m1, m2, m3) => (m1, e, s, IF (m2, m3, e, k))
       | App (m1, m2) => (m1, e, s, AR (m2, e, k))
       | PrimApp (opr, m1, m2) => (m1, e, s, PR1 (opr, m2, e, k))

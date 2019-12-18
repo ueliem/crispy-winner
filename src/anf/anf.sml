@@ -56,7 +56,7 @@ structure ANF : sig
   | First of atom
   | Second of atom
   | Unbox of atom
-  | RegionElim of atom * regionvar
+  | RegionElim of var * regionvar * regionvar
 
   and term = 
     Comp of comp
@@ -141,7 +141,7 @@ struct
   | First of atom
   | Second of atom
   | Unbox of atom
-  | RegionElim of atom * regionvar
+  | RegionElim of var * regionvar * regionvar
 
   and term = 
     Comp of comp
@@ -196,8 +196,8 @@ struct
       Second (substRegVarAtom (dst, newr) m)
   | substRegVarComp (dst, newr) (Unbox m) = 
       Unbox (substRegVarAtom (dst, newr) m)
-  | substRegVarComp (dst, newr) (RegionElim (m, r)) = 
-      RegionElim (substRegVarAtom (dst, newr) m, r)
+  | substRegVarComp (dst, newr) (RegionElim (f, r1, r2)) = 
+      RegionElim (f, if dst = r1 then newr else r1, if dst = r2 then newr else r2)
 
   and substRegVar (dst, newr) (Comp c) = Comp (substRegVarComp (dst, newr) c)
   | substRegVar (dst, newr) (Let (x, m1, m2)) = 
@@ -264,12 +264,11 @@ struct
       (transformAtom m k) >>= (fn m' => 
         return (LetRegion (r, m'))
       )
-  | transformAtom (Lang.RegionElim (m, r1)) k = 
-      transformAtom m (fn m' =>
+  | transformAtom (Lang.RegionElim (f, r1, r2)) k = 
       freshvar () >>= (fn x =>
       k (Var x) >>= (fn x' =>
-        return (Let (x, RegionElim (m', r1), x'))
-      )))
+        return (Let (x, RegionElim (V f, r1, r2), x'))
+      ))
   | transformAtom (Lang.IfElse (m1, m2, m3)) k = 
       transformAtom m1 (fn m1' => 
       (transformAtom m2 k) >>= (fn m2' => 
@@ -299,7 +298,7 @@ struct
   | transformComp (Lang.Unbox m) k = raise Fail ""
   | transformComp (Lang.Let (x, m1, m2, argt)) k = raise Fail ""
   | transformComp (Lang.LetRegion (r, m)) k = raise Fail ""
-  | transformComp (Lang.RegionElim (m, r1)) k = raise Fail ""
+  | transformComp (Lang.RegionElim (f, r1, r2)) k = raise Fail ""
   | transformComp (Lang.IfElse (m1, m2, m3)) k = raise Fail ""
   | transformComp (Lang.App (m1, m2)) k = raise Fail ""
   | transformComp (Lang.PrimApp (opr, m1, m2)) k = raise Fail ""
@@ -334,10 +333,8 @@ struct
       transformTerm m >>= (fn m' =>
         return (LetRegion (r, m'))
       )
-  | transformTerm (Lang.RegionElim (m, r1)) = 
-      transformAtom m (fn m' =>
-        return (Comp (RegionElim (m', r1)))
-      )
+  | transformTerm (Lang.RegionElim (f, r1, r2)) = 
+      return (Comp (RegionElim (V f, r1, r2)))
   | transformTerm (Lang.IfElse (m1, m2, m3)) = 
       transformAtom m1 (fn m1' =>
       transformTerm m2 >>= (fn m2' =>
@@ -358,12 +355,6 @@ struct
   and transformValue (Lang.IntLit i) k = k (Value (IntLit i))
   | transformValue (Lang.BoolLit b) k = k (Value (BoolLit b))
   | transformValue (Lang.UnitLit) k = k (Value (UnitLit))
-  | transformValue (Lang.Tuple (m1, m2)) k = 
-      transformAtom m1 (fn m1' =>
-      transformAtom m2 (fn m2' =>
-      k (Value (Tuple (m1', m2'))) >>= (fn t' =>
-        return t'
-      )))
   | transformValue (Lang.BarePointer (r, p)) k = k (Value (BarePointer (r, p)))
 
   and transformBoxedValue (Lang.BoxIntLit (i, r)) k = k (BoxedValue (BoxIntLit (i, r)))
