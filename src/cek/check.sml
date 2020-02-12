@@ -49,16 +49,10 @@ struct
         SOME (_, t) => return (t, [])
       | NONE => failCheck (VarNotInEnv v)
       )
-  | check tyenv regenv (Lang.First (m)) =
+  | check tyenv regenv (Lang.Select (i, m)) =
       check tyenv regenv m >>= (fn (t, phi) =>
         (case t of
-          Lang.BoxedTy (Lang.BoxTupleTy (t1, t2, r)) => return (t1, Set.insert r phi)
-        | _ => failCheck (EmptyError))
-      )
-  | check tyenv regenv (Lang.Second (m)) =
-      check tyenv regenv m >>= (fn (t, phi) =>
-        (case t of
-          Lang.BoxedTy (Lang.BoxTupleTy (t1, t2, r)) => return (t2, Set.insert r phi)
+          Lang.BoxedTy (Lang.BoxTupleTy (t1, r)) => return (List.nth (t1, i), Set.insert r phi)
         | _ => failCheck (EmptyError))
       )
   | check tyenv regenv (Lang.Unbox m) = 
@@ -100,15 +94,24 @@ struct
         | _ => failCheck (EmptyError))
       )))
   | check tyenv regenv (Lang.App (m1, m2)) = 
-      check tyenv regenv m1 >>= (fn (t1, phi1) =>
-      check tyenv regenv m2 >>= (fn (t2, phi2) =>
-        (case t1 of
-          Lang.BoxedTy (Lang.BoxFuncTy (t3, t4, phi3, r)) => 
-            if t3 = t2 then 
-              return (t4, Set.insert r (Set.union phi1 (Set.union phi2 phi3)))
-            else failCheck (EmptyError)
-        | _ => failCheck (EmptyError))
-      ))
+      let
+        fun f ([]) = return ([], [])
+        | f (x::xs) = 
+            check tyenv regenv x >>= (fn (t, phi) =>
+            f xs >>= (fn (tl, phi1) =>
+              return (t::tl, Set.union phi phi1)
+            ))
+      in
+        check tyenv regenv m1 >>= (fn (t1, phi1) =>
+        f m2 >>= (fn (t2, phi2) =>
+          (case t1 of
+            Lang.BoxedTy (Lang.BoxFuncTy (t3, t4, phi3, r)) => 
+              if t3 = t2 then 
+                return (t4, Set.insert r (Set.union phi1 (Set.union phi2 phi3)))
+              else failCheck (EmptyError)
+          | _ => failCheck (EmptyError))
+        ))
+      end
   | check tyenv regenv (Lang.PrimApp (opr, m1, m2)) = 
       check tyenv regenv m1 >>= (fn (t1, phi1) =>
       check tyenv regenv m2 >>= (fn (t2, phi2) =>
@@ -139,16 +142,32 @@ struct
       return (Lang.BoxUnitTy rho, [rho])
   | checkBoxValue tyenv regenv (Lang.BoxAbs a) = 
       checkAbs tyenv regenv a
-  | checkBoxValue tyenv regenv (Lang.BoxTuple (m1, m2, rho)) = 
-      check tyenv regenv m1 >>= (fn (t1, phi1) =>
+  | checkBoxValue tyenv regenv (Lang.BoxTuple (m, rho)) = 
+      let
+        fun f ([]) = return ([], [])
+        | f (x::xs) = 
+            check tyenv regenv x >>= (fn (t, phi) =>
+            f xs >>= (fn (tl, phi1) =>
+              return (t::tl, Set.union phi phi1)
+            ))
+      in
+        f m >>= (fn (tl, phi) =>
+          return (Lang.BoxTupleTy (tl, rho), Set.insert rho phi)
+        )
+      end
+      (* map (fn x => 
+        check tyenv regenv x >>= (fn (t, phi1) =>
+          return (t, phi1)
+        )) m *)
+      (* check tyenv regenv m1 >>= (fn (t1, phi1) =>
       check tyenv regenv m2 >>= (fn (t2, phi2) =>
         return (Lang.BoxTupleTy (t1, t2, rho), Set.insert rho (Set.union phi1 phi2))
-      ))
+      )) *)
   | checkBoxValue tyenv regenv (Lang.BoxBarePointer (r, p, rho)) = 
       raise Fail "not known at compile time"
 
   and checkAbs tyenv regenv (Lang.Lambda (x, m, argt, rho)) = 
-      check ((x, argt)::tyenv) regenv m >>= (fn (t, phi) =>
+      check (ListPair.zipEq (x, argt) @ tyenv) regenv m >>= (fn (t, phi) =>
         if List.exists (fn x => x = rho) regenv then
           return (Lang.BoxFuncTy (argt, t, phi, rho), [rho])
         else failCheck (EmptyError)

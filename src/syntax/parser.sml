@@ -5,15 +5,15 @@ sig
   val satisfies : (Tokenizer.token -> bool) -> Tokenizer.token TParser.Parser
   val keyword : Tokenizer.token -> Tokenizer.token TParser.Parser
   val eoi : unit -> Tokenizer.token TParser.Parser
-  val atom : unit -> Lang.term TParser.Parser
-  val term : unit -> Lang.term TParser.Parser
-  val variable : unit -> Lang.term TParser.Parser
-  val literal : unit -> Lang.term TParser.Parser
-  val application : unit -> Lang.term TParser.Parser
-  val abstraction : unit -> Lang.term TParser.Parser
-  val primapp : unit -> Lang.term TParser.Parser
-  (* val declaration : unit -> Lang.declaration TParser.Parser
-  val program : unit -> Lang.program TParser.Parser *)
+  val atom : unit -> Syntax.term TParser.Parser
+  val term : unit -> Syntax.term TParser.Parser
+  val variable : unit -> Syntax.term TParser.Parser
+  val literal : unit -> Syntax.term TParser.Parser
+  val application : unit -> Syntax.term TParser.Parser
+  val abstraction : unit -> Syntax.term TParser.Parser
+  val primapp : unit -> Syntax.term TParser.Parser
+  (* val declaration : unit -> Syntax.declaration TParser.Parser
+  val program : unit -> Syntax.program TParser.Parser *)
 end
 =
 struct
@@ -105,9 +105,19 @@ struct
     ))))
 
   fun tyatom () = 
-    typaren ()
+      tytuple ()
+    ++ typaren ()
     ++ tyliteral ()
     ++ tyregabs ()
+  and tytuple () =
+    lpar () >>= (fn _ =>
+    tyterm () >>= (fn x =>
+    symbol Tokenizer.Star >>= (fn _ =>
+    tyterm () >>= (fn y =>
+    rpar () >>= (fn _ =>
+    regionannotation () >>= (fn r =>
+      return (Syntax.BoxedTy (Syntax.BoxTupleTy (x, y, r)))
+    ))))))
   and typaren () = 
     lpar () >>= (fn _ =>
     tyterm () >>= (fn x =>
@@ -118,20 +128,20 @@ struct
     keyword (Tokenizer.KWInt) >>= (fn _ =>
     (keyword (Tokenizer.At) >>= (fn _ =>
     ident () >>= (fn r =>
-      return (Lang.BoxedTy (Lang.BoxIntTy r))
-    ))) ++ return Lang.IntTy
+      return (Syntax.BoxedTy (Syntax.BoxIntTy r))
+    ))) ++ return Syntax.IntTy
     ) ++
     keyword (Tokenizer.KWBool) >>= (fn _ =>
     (keyword (Tokenizer.At) >>= (fn _ =>
     ident () >>= (fn r =>
-      return (Lang.BoxedTy (Lang.BoxBoolTy r))
-    ))) ++ return Lang.BoolTy
+      return (Syntax.BoxedTy (Syntax.BoxBoolTy r))
+    ))) ++ return Syntax.BoolTy
     ) ++
     keyword (Tokenizer.KWUnit) >>= (fn _ =>
     (keyword (Tokenizer.At) >>= (fn _ =>
     ident () >>= (fn r =>
-      return (Lang.BoxedTy (Lang.BoxUnitTy r))
-    ))) ++ return Lang.UnitTy
+      return (Syntax.BoxedTy (Syntax.BoxUnitTy r))
+    ))) ++ return Syntax.UnitTy
     )
   and tyregabs () =
     keyword (Tokenizer.ForAll) >>= (fn _ =>
@@ -140,7 +150,7 @@ struct
     tyterm () >>= (fn t =>
     keyword (Tokenizer.At) >>= (fn _ =>
     ident () >>= (fn r2 =>
-      return (Lang.BoxedTy (Lang.BoxRegFuncTy (r1, t, phi, r2)))
+      return (Syntax.BoxedTy (Syntax.BoxRegFuncTy (r1, t, phi, r2)))
     ))))))
 
   and tyoperator () = 
@@ -181,8 +191,9 @@ struct
         (foldl 
           (fn (((b, r, phi), rhs), lhs) => 
             (case b of
-              "->" => Lang.BoxedTy (Lang.BoxFuncTy (lhs, rhs, phi, r))
-            | "*" => Lang.BoxedTy (Lang.BoxTupleTy (lhs, rhs, r))))
+              "->" => Syntax.BoxedTy (Syntax.BoxFuncTy (lhs, rhs, phi, r))
+            | "*" => Syntax.BoxedTy (Syntax.BoxTupleTy (lhs, rhs, r))
+            ))
           lhs brhsl)
     ))
   and tyterm () = typrec_parse 0
@@ -193,10 +204,9 @@ struct
     ++ ifelseterm ()
     ++ letterm ()
     ++ letregion ()
-    ++ pair ()
-    ++ fst ()
+    ++ tuple ()
+    ++ sel ()
     ++ regionelim ()
-    ++ snd ()
     ++ variable ()
     ++ literal () 
 
@@ -215,63 +225,59 @@ struct
     )))
   and variable () = 
     ident () >>= (fn x =>
-      return (Lang.Var x)
+      return (Syntax.Var x)
     )
-  and pair () = 
+  and tuple () = 
     lpar () >>= (fn _ =>
     term () >>= (fn x =>
     comma () >>= (fn _ =>
     term () >>= (fn y =>
     rpar () >>= (fn _ =>
     regionannotation () >>= (fn r =>
-      return (Lang.BoxedValue (Lang.BoxTuple (x, y, r)))
+      return (Syntax.BoxedValue (Syntax.BoxTuple (x, y, r)))
     ))))))
-  and fst () = 
-    keyword (Tokenizer.First) >>= (fn _ =>
+  and sel () = 
+    keyword (Tokenizer.Select) >>= (fn _ =>
+    integer () >>= (fn i =>
     term () >>= (fn x =>
-      return (Lang.First x)
-    ))
-  and snd () = 
-    keyword (Tokenizer.Second) >>= (fn _ =>
-    term () >>= (fn x =>
-      return (Lang.Second x)
-    ))
+      return (Syntax.Select (i, x))
+    )))
   and regionelim () = 
     ident () >>= (fn f =>
     regionset () >>= (fn rs =>
     regionannotation () >>= (fn a =>
       (* TODO fix this because elim only eliminates one regionvar *)
-      return (Lang.RegionElim (f, hd rs, a))
+      return (Syntax.RegionElim (f, hd rs, a))
     )))
   and literal () = 
     (integer () >>= (fn i =>
     optional (regionannotation ()) >>= (fn a =>
       (case a of
-        SOME r => return (Lang.BoxedValue (Lang.BoxIntLit (i, r)))
-      | NONE => return (Lang.Value (Lang.IntLit i))
+        SOME r => return (Syntax.BoxedValue (Syntax.BoxIntLit (i, r)))
+      | NONE => return (Syntax.Value (Syntax.IntLit i))
     )))) ++ 
     (keyword (Tokenizer.True) >>= (fn _ =>
     optional (regionannotation ()) >>= (fn a =>
       (case a of
-        SOME r => return (Lang.BoxedValue (Lang.BoxBoolLit (true, r)))
-      | NONE => return (Lang.Value (Lang.BoolLit true))
+        SOME r => return (Syntax.BoxedValue (Syntax.BoxBoolLit (true, r)))
+      | NONE => return (Syntax.Value (Syntax.BoolLit true))
     )))) ++
     (keyword (Tokenizer.False) >>= (fn _ =>
     optional (regionannotation ()) >>= (fn a =>
       (case a of
-        SOME r => return (Lang.BoxedValue (Lang.BoxBoolLit (false, r)))
-      | NONE => return (Lang.Value (Lang.BoolLit false))
+        SOME r => return (Syntax.BoxedValue (Syntax.BoxBoolLit (false, r)))
+      | NONE => return (Syntax.Value (Syntax.BoolLit false))
     )))) ++
     (unitsymbol () >>= (fn _ =>
     optional (regionannotation ()) >>= (fn a =>
       (case a of
-        SOME r => return (Lang.BoxedValue (Lang.BoxUnitLit r))
-      | NONE => return (Lang.Value (Lang.UnitLit))
+        SOME r => return (Syntax.BoxedValue (Syntax.BoxUnitLit r))
+      | NONE => return (Syntax.Value (Syntax.UnitLit))
     ))))
   and application () =
     atom () >>= (fn x =>
     many (atom ()) >>= (fn apps =>
-      return (foldl (fn (t, s) => Lang.App (t, s)) x apps)
+      return (foldl (fn (t, s) => Syntax.App (t, s)) x apps)
     ))
   and abstraction () =
     optional (keyword (Tokenizer.ForAll) >>= (fn _ => 
@@ -288,12 +294,12 @@ struct
     regionannotation () >>= (fn r2 =>
       (case regs of 
         SOME (r1, rs) =>
-          return (Lang.BoxedValue (Lang.BoxAbs (foldl
-            (fn (r, u) => Lang.RegionLambda (r, u, r1))
-            (Lang.Lambda (x, e, y, r2))
+          return (Syntax.BoxedValue (Syntax.BoxAbs (foldl
+            (fn (r, u) => Syntax.RegionLambda (r, u, r1))
+            (Syntax.Lambda (x, e, y, r2))
             (List.rev rs))))
       | NONE => 
-          return (Lang.BoxedValue (Lang.BoxAbs (Lang.Lambda (x, e, y, r2))))
+          return (Syntax.BoxedValue (Syntax.BoxAbs (Syntax.Lambda (x, e, y, r2))))
     )))))))))
   and ifelseterm () =
     keyword (Tokenizer.If) >>= (fn _ =>
@@ -302,7 +308,7 @@ struct
     term () >>= (fn y =>
     keyword (Tokenizer.Else) >>= (fn _ =>
     term () >>= (fn z =>
-      return (Lang.IfElse (x, y, z))
+      return (Syntax.IfElse (x, y, z))
     ))))))
   and letterm () =
     keyword (Tokenizer.Let) >>= (fn _ =>
@@ -314,7 +320,7 @@ struct
     keyword (Tokenizer.In) >>= (fn _ =>
     term () >>= (fn z =>
     keyword (Tokenizer.End) >>= (fn _ =>
-      return (Lang.Let (x, y, z, t))
+      return (Syntax.Let (x, y, z, t))
     )))))))))
   and letregion () =
     keyword (Tokenizer.LetRegion) >>= (fn _ =>
@@ -322,7 +328,7 @@ struct
     keyword (Tokenizer.In) >>= (fn _ =>
     term () >>= (fn y =>
     keyword (Tokenizer.End) >>= (fn _ =>
-      return (Lang.LetRegion (x, y))
+      return (Syntax.LetRegion (x, y))
     )))))
   and primapp () = prec_parse 0
   and operator () =
@@ -372,7 +378,7 @@ struct
     many (prec_helper level) >>= (fn brhsl =>
       return
         (foldl 
-          (fn ((b, rhs), lhs) => Lang.PrimApp (b, lhs, rhs))
+          (fn ((b, rhs), lhs) => Syntax.PrimApp (b, lhs, rhs))
           lhs brhsl)
     ))
 

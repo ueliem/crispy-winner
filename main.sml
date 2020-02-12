@@ -6,10 +6,13 @@ use "parsercombinator/charparser.sml";
 use "src/cek/lang.sml";
 use "src/cek/check.sml";
 use "src/cek/interp.sml";
-use "src/cek/tokenizer.sml";
-use "src/cek/parser.sml";
+
+use "src/syntax/lang.sml";
+use "src/syntax/tokenizer.sml";
+use "src/syntax/parser.sml";
 
 use "src/anf/anf.sml";
+(* use "src/ssa/ssa.sml"; *)
 
 open Lang
 open Interp

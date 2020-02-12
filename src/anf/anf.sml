@@ -14,7 +14,7 @@ structure ANF : sig
     BoxIntTy of regionvar
   | BoxBoolTy of regionvar
   | BoxUnitTy of regionvar
-  | BoxTupleTy of ty * ty * regionvar
+  | BoxTupleTy of ty list * regionvar
   | BoxFuncTy of ty * ty * effect * regionvar
   | BoxRegFuncTy of regionvar * ty * effect * regionvar
 
@@ -22,7 +22,6 @@ structure ANF : sig
     IntTy
   | BoolTy
   | UnitTy
-  | TupleTy of ty * ty
   | BoxedTy of boxty
 
   datatype abs = 
@@ -33,7 +32,6 @@ structure ANF : sig
     IntLit of int
   | BoolLit of bool
   | UnitLit
-  | Tuple of atom * atom
   | BarePointer of regionvar * pointername
 
   and boxvalue = 
@@ -41,7 +39,7 @@ structure ANF : sig
   | BoxBoolLit of bool * regionvar
   | BoxUnitLit of regionvar
   | BoxAbs of abs
-  | BoxTuple of atom * atom * regionvar
+  | BoxTuple of atom list * regionvar
   | BoxBarePointer of regionvar * pointername * regionvar
 
   and atom = 
@@ -53,8 +51,7 @@ structure ANF : sig
     Atom of atom
   | App of atom * atom
   | PrimApp of operator * atom * atom
-  | First of atom
-  | Second of atom
+  | Select of int * atom
   | Unbox of atom
   | RegionElim of var * regionvar * regionvar
 
@@ -99,7 +96,7 @@ struct
     BoxIntTy of regionvar
   | BoxBoolTy of regionvar
   | BoxUnitTy of regionvar
-  | BoxTupleTy of ty * ty * regionvar
+  | BoxTupleTy of ty list * regionvar
   | BoxFuncTy of ty * ty * effect * regionvar
   | BoxRegFuncTy of regionvar * ty * effect * regionvar
 
@@ -107,7 +104,6 @@ struct
     IntTy
   | BoolTy
   | UnitTy
-  | TupleTy of ty * ty
   | BoxedTy of boxty
 
   datatype abs = 
@@ -118,7 +114,6 @@ struct
     IntLit of int
   | BoolLit of bool
   | UnitLit
-  | Tuple of atom * atom
   | BarePointer of regionvar * pointername
 
   and boxvalue = 
@@ -126,7 +121,7 @@ struct
   | BoxBoolLit of bool * regionvar
   | BoxUnitLit of regionvar
   | BoxAbs of abs
-  | BoxTuple of atom * atom * regionvar
+  | BoxTuple of atom list * regionvar
   | BoxBarePointer of regionvar * pointername * regionvar
 
   and atom = 
@@ -138,8 +133,7 @@ struct
     Atom of atom
   | App of atom * atom
   | PrimApp of operator * atom * atom
-  | First of atom
-  | Second of atom
+  | Select of int * atom
   | Unbox of atom
   | RegionElim of var * regionvar * regionvar
 
@@ -158,9 +152,8 @@ struct
       BoxBoolTy (if dst = rho then newr else rho)
   | substRegVarBoxTy (dst, newr) (BoxUnitTy rho) = 
       BoxUnitTy (if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxTupleTy (t1, t2 , rho)) = 
-      BoxTupleTy (substRegVarTy (dst, newr) t1, 
-        substRegVarTy (dst, newr) t2,
+  | substRegVarBoxTy (dst, newr) (BoxTupleTy (t, rho)) = 
+      BoxTupleTy ( map (substRegVarTy (dst, newr)) t, 
         if dst = rho then newr else rho)
   | substRegVarBoxTy (dst, newr) (BoxFuncTy (t1, t2, phi, rho)) =
       BoxFuncTy (substRegVarTy (dst, newr) t1, 
@@ -175,8 +168,6 @@ struct
   and substRegVarTy (dst, newr) (IntTy) = IntTy
   | substRegVarTy (dst, newr) (BoolTy) = BoolTy
   | substRegVarTy (dst, newr) (UnitTy) = UnitTy
-  | substRegVarTy (dst, newr) (TupleTy (t1, t2)) = 
-      TupleTy (substRegVarTy (dst, newr) t1, substRegVarTy (dst, newr) t2)
   | substRegVarTy (dst, newr) (BoxedTy t) = 
       BoxedTy (substRegVarBoxTy (dst, newr) t)
 
@@ -190,10 +181,8 @@ struct
       App (substRegVarAtom (dst, newr) m1, substRegVarAtom (dst, newr) m2)
   | substRegVarComp (dst, newr) (PrimApp (opr, m1, m2)) = 
       PrimApp (opr, substRegVarAtom (dst, newr) m1, substRegVarAtom (dst, newr) m2)
-  | substRegVarComp (dst, newr) (First (m)) =
-      First (substRegVarAtom (dst, newr) m)
-  | substRegVarComp (dst, newr) (Second (m)) =
-      Second (substRegVarAtom (dst, newr) m)
+  | substRegVarComp (dst, newr) (Select (i, m)) =
+      Select (i, substRegVarAtom (dst, newr) m)
   | substRegVarComp (dst, newr) (Unbox m) = 
       Unbox (substRegVarAtom (dst, newr) m)
   | substRegVarComp (dst, newr) (RegionElim (f, r1, r2)) = 
@@ -210,16 +199,14 @@ struct
   and substRegVarValue (dst, newr) (IntLit i) = IntLit i
   | substRegVarValue (dst, newr) (BoolLit b) = BoolLit b
   | substRegVarValue (dst, newr) (UnitLit) = UnitLit
-  | substRegVarValue (dst, newr) (Tuple (m1, m2)) = 
-      Tuple (substRegVarAtom (dst, newr) m1, substRegVarAtom (dst, newr) m2)
   | substRegVarValue (dst, newr) (BarePointer (r, p)) = (BarePointer (r, p))
 
   and substRegVarBoxValue (dst, newr) (BoxIntLit (i, r)) = BoxIntLit (i, if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxBoolLit (b, r)) = BoxBoolLit (b, if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxUnitLit r) = BoxUnitLit (if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxAbs a) = BoxAbs (substRegVarAbs (dst, newr) a)
-  | substRegVarBoxValue (dst, newr) (BoxTuple (m1, m2, r)) = 
-      BoxTuple (substRegVarAtom (dst, newr) m1, substRegVarAtom (dst, newr) m2, if dst = r then newr else r)
+  | substRegVarBoxValue (dst, newr) (BoxTuple (m, r)) = 
+      BoxTuple (map (substRegVarAtom (dst, newr)) m, if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxBarePointer (r1, p, r2)) =
       BoxBarePointer (r1, p, if dst = r2 then newr else r2)
 
@@ -237,17 +224,11 @@ struct
   fun transformAtom (Lang.Value v) k = transformValue v k
   | transformAtom (Lang.BoxedValue v) k = transformBoxedValue v k
   | transformAtom (Lang.Var v) k = k (Var (V v))
-  | transformAtom (Lang.First (m)) k = 
+  | transformAtom (Lang.Select (i, m)) k = 
       transformAtom m (fn m' =>
       freshvar () >>= (fn x =>
       k (Var x) >>= (fn x' =>
-      return (Let (x, First m', x'))
-      )))
-  | transformAtom (Lang.Second (m)) k = 
-      transformAtom m (fn m' =>
-      freshvar () >>= (fn x =>
-      k (Var x) >>= (fn x' =>
-        return (Let (x, Second m', x'))
+        return (Let (x, Select (i, m'), x'))
       )))
   | transformAtom (Lang.Unbox m) k = 
       transformAtom m (fn m' =>
@@ -293,8 +274,7 @@ struct
   and transformComp (Lang.Value v) k = raise Fail ""
   | transformComp (Lang.BoxedValue v) k = raise Fail ""
   | transformComp (Lang.Var v) k = raise Fail ""
-  | transformComp (Lang.First (m)) k = raise Fail ""
-  | transformComp (Lang.Second (m)) k = raise Fail ""
+  | transformComp (Lang.Select (i, m)) k = raise Fail ""
   | transformComp (Lang.Unbox m) k = raise Fail ""
   | transformComp (Lang.Let (x, m1, m2, argt)) k = raise Fail ""
   | transformComp (Lang.LetRegion (r, m)) k = raise Fail ""
@@ -312,13 +292,9 @@ struct
         return (Comp (Atom v'))
       )
   | transformTerm (Lang.Var v) = return (Comp (Atom (Var (V v))))
-  | transformTerm (Lang.First (m)) = 
+  | transformTerm (Lang.Select (i, m)) = 
       transformAtom m (fn m' =>
-        return (Comp (First m'))
-      )
-  | transformTerm (Lang.Second (m)) = 
-      transformAtom m (fn m' =>
-        return (Comp (Second m'))
+        return (Comp (Select (i, m')))
       )
   | transformTerm (Lang.Unbox m) = 
       transformAtom m (fn m' =>
@@ -364,12 +340,19 @@ struct
       transformBoxedAbs a >>= (fn a' =>
         k (BoxedValue (BoxAbs a'))
       )
-  | transformBoxedValue (Lang.BoxTuple (m1, m2, r)) k = 
-      transformAtom m1 (fn m1' =>
-      transformAtom m2 (fn m2' =>
-      k (BoxedValue (BoxTuple (m1', m2', r))) >>= (fn t' =>
-        return t'
-      )))
+  | transformBoxedValue (Lang.BoxTuple (m, r)) k = 
+      let
+        fun f (m', []) = 
+            k (BoxedValue (BoxTuple (m', r))) >>= (fn m'' =>
+              return m''
+            )
+        | f (m', x::xs) = 
+            transformAtom x (fn x' =>
+              f (m' @ [x'], xs)
+            )
+      in
+        f ([], m)
+      end
   | transformBoxedValue (Lang.BoxBarePointer (r1, p, r2)) k = k (BoxedValue (BoxBarePointer (r1, p, r2)))
 
   and transformBoxedAbs (Lang.Lambda (x, m, t, r)) = 

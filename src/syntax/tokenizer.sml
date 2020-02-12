@@ -9,8 +9,7 @@ sig
   | KWBoxed
   | True
   | False
-  | First
-  | Second
+  | Select
   | ForAll
   | Pi
   | Sigma
@@ -71,8 +70,7 @@ struct
   | KWBoxed
   | True
   | False
-  | First
-  | Second
+  | Select
   | ForAll
   | Pi
   | Sigma
@@ -145,8 +143,7 @@ struct
       | "bool" => return KWBool
       | "true" => return True
       | "false" => return False
-      | "fst" => return First
-      | "snd" => return Second
+      | "sel" => return Select
       | _ => return (Identifier (String.implode (x::y)))
     ))
 

@@ -1,4 +1,4 @@
-structure Lang : sig
+structure Syntax : sig
   type var = string
   type regionvar = string
   type pointername = int
@@ -9,8 +9,8 @@ structure Lang : sig
     BoxIntTy of regionvar
   | BoxBoolTy of regionvar
   | BoxUnitTy of regionvar
-  | BoxTupleTy of ty list * regionvar
-  | BoxFuncTy of ty list * ty * effect * regionvar
+  | BoxTupleTy of ty * ty * regionvar
+  | BoxFuncTy of ty * ty * effect * regionvar
   | BoxRegFuncTy of regionvar * ty * effect * regionvar
 
   and ty =
@@ -20,7 +20,7 @@ structure Lang : sig
   | BoxedTy of boxty
 
   datatype abs = 
-    Lambda of var list * term * ty list * regionvar
+    Lambda of var * term * ty * regionvar
   | RegionLambda of regionvar * abs * regionvar
   
   and value =
@@ -34,7 +34,7 @@ structure Lang : sig
   | BoxBoolLit of bool * regionvar
   | BoxUnitLit of regionvar
   | BoxAbs of abs
-  | BoxTuple of term list * regionvar
+  | BoxTuple of term * term * regionvar
   | BoxBarePointer of regionvar * pointername * regionvar
 
   and term = 
@@ -47,7 +47,7 @@ structure Lang : sig
   | LetRegion of regionvar * term
   | RegionElim of var * regionvar * regionvar
   | IfElse of term * term * term
-  | App of term * term list
+  | App of term * term
   | PrimApp of operator * term * term
 
   val substRegVarBoxTy : (regionvar * regionvar) -> boxty -> boxty
@@ -71,8 +71,8 @@ struct
     BoxIntTy of regionvar
   | BoxBoolTy of regionvar
   | BoxUnitTy of regionvar
-  | BoxTupleTy of ty list * regionvar
-  | BoxFuncTy of ty list * ty * effect * regionvar
+  | BoxTupleTy of ty * ty * regionvar
+  | BoxFuncTy of ty * ty * effect * regionvar
   | BoxRegFuncTy of regionvar * ty * effect * regionvar
 
   and ty =
@@ -82,7 +82,7 @@ struct
   | BoxedTy of boxty
 
   datatype abs = 
-    Lambda of var list * term * ty list * regionvar
+    Lambda of var * term * ty * regionvar
   | RegionLambda of regionvar * abs * regionvar
 
   and value =
@@ -96,7 +96,7 @@ struct
   | BoxBoolLit of bool * regionvar
   | BoxUnitLit of regionvar
   | BoxAbs of abs
-  | BoxTuple of term list * regionvar
+  | BoxTuple of term * term * regionvar
   | BoxBarePointer of regionvar * pointername * regionvar
 
   and term = 
@@ -109,7 +109,7 @@ struct
   | LetRegion of regionvar * term
   | RegionElim of var * regionvar * regionvar
   | IfElse of term * term * term
-  | App of term * term list
+  | App of term * term
   | PrimApp of operator * term * term
 
   fun substRegVarBoxTy (dst, newr) (BoxIntTy rho) = 
@@ -118,11 +118,11 @@ struct
       BoxBoolTy (if dst = rho then newr else rho)
   | substRegVarBoxTy (dst, newr) (BoxUnitTy rho) = 
       BoxUnitTy (if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxTupleTy (t, rho)) = 
-      BoxTupleTy (map (substRegVarTy (dst, newr)) t, 
+  | substRegVarBoxTy (dst, newr) (BoxTupleTy (t1, t2, rho)) = 
+      BoxTupleTy (substRegVarTy (dst, newr) t1, substRegVarTy (dst, newr) t2, 
         if dst = rho then newr else rho)
   | substRegVarBoxTy (dst, newr) (BoxFuncTy (t1, t2, phi, rho)) =
-      BoxFuncTy (map (substRegVarTy (dst, newr)) t1, 
+      BoxFuncTy (substRegVarTy (dst, newr) t1, 
         substRegVarTy (dst, newr) t2,
         map (fn r => if dst = r then newr else r) phi,
         if dst = rho then newr else rho)
@@ -154,7 +154,7 @@ struct
   | substRegVar (dst, newr) (RegionElim (f, r1, r2)) = 
       RegionElim (f, if dst = r1 then newr else r1, if dst = r2 then newr else r2)
   | substRegVar (dst, newr) (App (m1, m2)) = 
-      App (substRegVar (dst, newr) m1, map (substRegVar (dst, newr)) m2)
+      App (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
   | substRegVar (dst, newr) (PrimApp (opr, m1, m2)) = 
       PrimApp (opr, substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
 
@@ -167,8 +167,8 @@ struct
   | substRegVarBoxValue (dst, newr) (BoxBoolLit (b, r)) = BoxBoolLit (b, if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxUnitLit r) = BoxUnitLit (if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxAbs a) = BoxAbs (substRegVarAbs (dst, newr) a)
-  | substRegVarBoxValue (dst, newr) (BoxTuple (m, r)) = 
-      BoxTuple (map (substRegVar (dst, newr)) m, if dst = r then newr else r)
+  | substRegVarBoxValue (dst, newr) (BoxTuple (m1, m2, r)) = 
+      BoxTuple (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2, if dst = r then newr else r)
   | substRegVarBoxValue (dst, newr) (BoxBarePointer (r1, p, r2)) =
       BoxBarePointer (r1, p, if dst = r2 then newr else r2)
 
