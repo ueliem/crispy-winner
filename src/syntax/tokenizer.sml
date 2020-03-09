@@ -6,7 +6,9 @@ sig
   | KWInt
   | KWBool
   | KWUnit
-  | KWBoxed
+  | KWUnbox
+  | KWElim
+  | KWType
   | True
   | False
   | Select
@@ -67,7 +69,9 @@ struct
   | KWInt
   | KWBool
   | KWUnit
-  | KWBoxed
+  | KWUnbox
+  | KWElim
+  | KWType
   | True
   | False
   | Select
@@ -141,9 +145,13 @@ struct
       | "else" => return Else
       | "int" => return KWInt
       | "bool" => return KWBool
+      | "unit" => return KWUnit
       | "true" => return True
       | "false" => return False
+      | "unbox" => return KWUnbox
+      | "elim" => return KWElim
       | "sel" => return Select
+      | "type" => return KWType
       | _ => return (Identifier (String.implode (x::y)))
     ))
 
