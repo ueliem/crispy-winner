@@ -1,2 +1,2 @@
-val y : t = fn x : int => x + 1
+val y : int = fn {} (x : int) : int => x + 1
 

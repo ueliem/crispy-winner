@@ -108,19 +108,15 @@ end
 
 functor OptionT (structure M : MONAD) :
 sig
-  include MONAD where type 'a monad = 'a option M.monad
+  include MONADPLUSZERO where type 'a monad = 'a option M.monad
 
   val lift : 'a M.monad -> 'a option M.monad
-
-  val fail : unit -> 'a monad
 end
 =
 struct
   type 'a monad = 'a option M.monad
 
   fun return x = M.return (SOME x)
-
-  fun fail () = M.return NONE
 
   fun op >>= (m : 'a option M.monad, f : 'a -> 'b option M.monad) : 'b option M.monad = 
     M.>>= (m, (fn (x : 'a option) =>
@@ -133,6 +129,20 @@ struct
     M.>>= (m, fn (x : 'a) =>
       M.return (SOME x)
     )
+
+  val zero = M.return NONE
+
+  fun op ++ (m1, m2) =
+    M.>>= (m1, (fn (x : 'a option) =>
+      case x of
+        SOME y => M.return (SOME y)
+      | NONE => 
+          M.>>= (m2, (fn (z : 'a option) =>
+            case z of
+              SOME y => M.return (SOME y)
+            | NONE => M.return NONE
+          ))
+    ))
 
 end
 

@@ -2,6 +2,7 @@ use "common/monad.sml";
 use "common/set.sml";
 use "common/assoclist.sml";
 use "parsercombinator/pc.sml";
+use "newpc.sml";
 use "parsercombinator/charparser.sml";
 use "src/cek/lang.sml";
 use "src/cek/check.sml";
@@ -11,22 +12,16 @@ use "src/syntax/lang.sml";
 use "src/syntax/tokenizer.sml";
 use "src/syntax/parser.sml";
 
-use "src/anf/anf.sml";
+(* use "src/anf/anf.sml"; *)
 (* use "src/ssa/ssa.sml"; *)
 
 open Lang
 open Interp
 
-val prog = App (BoxedValue (BoxAbs (Lambda ("x", Var "x", IntTy, "r"))), Value (IntLit 7))
-(* val prog = Lambda ("x", Var "x", IntTy) *)
-val seq = "fn x : int => (x + 1) at r"
-
-val seq1 = "snd (x + y + z)"
-
 fun main () =
 let
   val _ = PolyML.print_depth 100
-  val _ = PolyML.print prog
+  (* val _ = PolyML.print prog
   val initstate = (prog, EmptyEnv, [], Empty)
   val _ = PolyML.print initstate
   val _ = PolyML.print (TypeCheck.runCheck prog)
@@ -44,9 +39,20 @@ let
   val t = Tokenizer.tokenize { pos = 0, s = contents }
   val _ = PolyML.print t
   val syn = SyntaxParser.term () t
-  val _ = PolyML.print syn
+  val _ = PolyML.print syn *)
 
+  val filename = List.nth (CommandLine.arguments (), 0)
+  val contents : CharVector.vector = TextIO.input (TextIO.openIn filename)
+  val _ = PolyML.print contents
+  val t = Tokenizer.tokenize { pos = 0, s = contents }
+  val _ = PolyML.print t
+  val syn = SyntaxParser.program () t
+  val _ = PolyML.print syn
   val _ = case syn of
+    TParser.Ok (s, _) => (PolyML.print ("OK"))
+  | _ => (PolyML.print ("NOT OK"))
+
+  (* val _ = case syn of
     TParser.Ok (s, _) => 
     let
       val initstate1 = (s, EmptyEnv, [], Empty)
@@ -57,7 +63,7 @@ let
     in
       ()
     end
-  | _ => ()
+  | _ => () *)
 in
   ()
 end

@@ -1,5 +1,5 @@
 structure CharStream = StreamFunctor (CharVector)
-structure CParser = ParserFunctor(CharStream)
+structure CParser = ParserT(structure S = CharStream)
 
 structure CharParser : 
 sig
@@ -21,15 +21,15 @@ struct
 
   val symbols = [#"+", #"-", #"*", #"/", #"=", #">", #"<", #":"]
 
-  fun any () =
+  (* fun any () =
     (fn (s : CharStream.stream) =>
       (case CharStream.uncons s of
         SOME (x, xs) => CParser.Ok (x, xs)
-      | NONE => fail s))
+      | NONE => fail s)) *)
 
   fun satisfies f = 
-    any () >>= (fn x =>
-    if f x then return x else fail)
+    next () >>= (fn x =>
+    if f x then return x else fail ())
 
   fun lpar () = satisfies (fn x => x = #"(")
 

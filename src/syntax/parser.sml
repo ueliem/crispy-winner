@@ -12,8 +12,8 @@ sig
   val application : unit -> Syntax.term TParser.Parser
   val abstraction : unit -> Syntax.term TParser.Parser
   val primapp : unit -> Syntax.term TParser.Parser
-  (* val declaration : unit -> Syntax.declaration TParser.Parser
-  val program : unit -> Syntax.program TParser.Parser *)
+  val declaration : unit -> Syntax.declaration TParser.Parser
+  val program : unit -> Syntax.program TParser.Parser
 end
 =
 struct
