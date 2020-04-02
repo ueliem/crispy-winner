@@ -11,13 +11,25 @@ sig
 
 end
 
+signature MZERO = 
+sig
+  type 'a monad
+  val zero : 'a monad
+end
+
+signature MPLUS = 
+sig
+  type 'a monad
+  val ++ : 'a monad * 'a monad -> 'a monad
+end
+
 signature MONADPLUSZERO =
 sig
   include MONAD
-
-  val ++ : 'a monad * 'a monad -> 'a monad
-
+  structure MZ : MZERO where type 'a monad = 'a monad
+  structure MP : MPLUS where type 'a monad = 'a monad
   val zero : 'a monad
+  val ++ : 'a monad * 'a monad -> 'a monad
 
 end
 
@@ -79,6 +91,21 @@ structure OptionMonad : MONADPLUSZERO =
 struct
   type 'a monad = 'a option
 
+  structure MZ : MZERO =
+  struct
+    type 'a monad = 'a monad
+    val zero = NONE
+  end
+
+  structure MP : MPLUS =
+  struct
+    type 'a monad = 'a monad
+    fun op ++ (m1, m2) =
+      case m1 of
+        SOME x => SOME x
+      | NONE => m2
+  end
+
   fun return x = SOME x
 
   fun op >>= (m, f) = 
@@ -86,12 +113,9 @@ struct
       SOME x => f x
     | NONE => NONE
 
-  val zero = NONE
+  val zero = MZ.zero
 
-  fun op ++ (m1, m2) =
-    case m1 of
-      SOME x => SOME x
-    | NONE => m2
+  fun op ++ (m1, m2) = MP.++ (m1, m2)
 
 end
 
@@ -116,6 +140,29 @@ end
 struct
   type 'a monad = 'a option M.monad
 
+  structure MZ : MZERO = 
+  struct
+    type 'a monad = 'a option M.monad
+    fun f () = M.return NONE
+    val zero = f ()
+  end
+
+  structure MP : MPLUS =
+  struct
+    type 'a monad = 'a option M.monad
+    fun op ++ (m1, m2) =
+      M.>>= (m1, (fn (x : 'a option) =>
+        case x of
+          SOME y => M.return (SOME y)
+        | NONE =>
+            M.>>= (m2, (fn (z : 'a option) =>
+              case z of
+                SOME y => M.return (SOME y)
+              | NONE => M.return NONE
+            ))
+      ))
+  end
+
   fun return x = M.return (SOME x)
 
   fun op >>= (m : 'a option M.monad, f : 'a -> 'b option M.monad) : 'b option M.monad = 
@@ -130,19 +177,9 @@ struct
       M.return (SOME x)
     )
 
-  val zero = M.return NONE
+  val zero = MZ.zero
 
-  fun op ++ (m1, m2) =
-    M.>>= (m1, (fn (x : 'a option) =>
-      case x of
-        SOME y => M.return (SOME y)
-      | NONE => 
-          M.>>= (m2, (fn (z : 'a option) =>
-            case z of
-              SOME y => M.return (SOME y)
-            | NONE => M.return NONE
-          ))
-    ))
+  fun op ++ (m1, m2) = MP.++ (m1, m2)
 
 end
 
