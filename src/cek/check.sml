@@ -30,6 +30,8 @@ struct
   type typeenv = (Lang.var * Lang.ty) list
   type regionenv = Lang.regionvar list
 
+  fun fail () = M.return NONE
+
   fun put_error error =
     lift M.get >>= (fn (s : typestate) =>
     lift (M.put ({ errs = error::(#errs s) }))
@@ -180,7 +182,7 @@ struct
       )
 
   fun runCheck prog = 
-    (M.runState (check [] [] prog) { errs = [] })
+    ((check [] [] prog) { errs = [] })
 
 end
 

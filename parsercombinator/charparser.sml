@@ -1,7 +1,54 @@
-structure CharStream = StreamFunctor (CharVector)
-structure CParser = ParserT(structure S = CharStream)
+structure CharStream =
+  StreamFunctor (structure S = CharVector;
+    val eq = (fn (x, y) => x = y))
 
-structure CharParser : 
+structure CharFileStream :
+sig
+  include STRM
+  structure CS : STRM
+end
+=
+struct
+  structure CS = CharStream
+  type pos = int * int
+  type stream = { s : CS.stream, pos : pos }
+  type elem = CS.elem
+
+  fun uncons (strm) = 
+  let
+    val (row, col) = #pos strm
+  in
+    (case CS.uncons (#s strm) of
+      SOME (c, s') =>
+        (case c of
+          #"\n" => SOME (c, { s = s', pos = (row + 1, col) })
+        | _ => SOME (c, { s = s', pos = (row, col + 1) }))
+    | NONE => NONE)
+  end
+
+  fun position (strm) = #pos strm
+
+  val equiv = CS.equiv
+
+  fun peek (strm) = CS.peek (#s strm)
+
+end
+
+(* structure CParser = ParserT(structure S = CharStream) *)
+
+functor CharParser (structure S : sig
+  include STRM
+  where type elem = char
+end)
+(* sig
+  structure CParser
+end
+=
+struct
+  structure CParser = ParserT(structure S = S)
+end
+*)
+(* structure CharParser : 
 sig
   val satisfies : (char -> bool) -> char CParser.Parser
   val lpar : unit -> char CParser.Parser
@@ -14,9 +61,11 @@ sig
   val letter : unit -> char CParser.Parser
   val alphanum : unit -> char CParser.Parser
   val space : unit -> char CParser.Parser
-end
+end*)
 =
 struct
+  structure CErr = StreamError(structure S = S)
+  structure CParser = ParserT(structure S = S; structure E = CErr)
   open CParser
 
   val symbols = [#"+", #"-", #"*", #"/", #"=", #">", #"<", #":"]
@@ -51,4 +100,7 @@ struct
 
   fun space () = satisfies Char.isSpace
 end
+
+structure VectorCharParser = CharParser (structure S = CharStream)
+structure FileCharParser = CharParser (structure S = CharFileStream)
 

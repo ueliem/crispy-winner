@@ -1,6 +1,6 @@
 structure Tokenizer : 
 sig
-  datatype token =
+  datatype tok =
     Identifier of string
   | Integer of int
   | KWInt
@@ -48,22 +48,26 @@ sig
   | Comma
   | EOI
 
-  structure TokenVector : MONO_VECTOR
-  structure TokenStream : STRM
+  type token = CharFileStream.pos * tok
 
-  val whitespace : unit -> char list CParser.Parser
-  val word : unit -> token CParser.Parser
-  val integer : unit -> token CParser.Parser
-  val unitsymbol : unit -> token CParser.Parser
-  val lpar : unit -> token CParser.Parser
-  val rpar : unit -> token CParser.Parser
-  val sym : unit -> token CParser.Parser
-  val tok : unit -> token CParser.Parser
-  val tokenize : CharStream.stream -> TokenStream.stream
+  structure TokenVector : MONO_VECTOR
+  structure TokenStream : sig
+    include STRM
+  end
+
+  val whitespace : unit -> char list FileCharParser.Parser
+  val word : unit -> tok FileCharParser.Parser
+  val integer : unit -> tok FileCharParser.Parser
+  val unitsymbol : unit -> tok FileCharParser.Parser
+  val lpar : unit -> tok FileCharParser.Parser
+  val rpar : unit -> tok FileCharParser.Parser
+  val sym : unit -> tok FileCharParser.Parser
+  val tok : unit -> token FileCharParser.Parser
+  val tokenize : CharFileStream.stream -> TokenStream.stream
 end
 =
 struct
-  datatype token =
+  datatype tok =
     Identifier of string
   | Integer of int
   | KWInt
@@ -111,7 +115,7 @@ struct
   | Comma
   | EOI
 
-  open CParser
+  type token = CharFileStream.pos * tok
 
   structure TokenVector : MONO_VECTOR =
   struct
@@ -120,14 +124,38 @@ struct
     and elem = token
   end
 
-  structure TokenStream = StreamFunctor (TokenVector)
+  structure TokenStream = 
+  struct
+    structure TS = StreamFunctor (structure S = TokenVector;
+      val eq = (fn (x, y) => x = y))
+
+    type pos = int * int
+    type stream = { s : TS.stream }
+    type elem = TS.elem
+
+    fun uncons (strm) = 
+      (case TS.uncons (#s strm) of
+        SOME (t, s') => SOME (t, { s = s' })
+      | NONE => NONE)
+
+    fun position (strm) =
+      (case TS.peek (#s strm) of
+        SOME (p, t) => p
+      | NONE => raise Match)
+
+    val equiv = TS.equiv
+
+    fun peek (strm) = TS.peek (#s strm)
+  end
+
+  open FileCharParser
 
   fun whitespace () : char list Parser =
-    many (CharParser.space ())
+    many (FileCharParser.space ())
 
-  fun word () : token Parser =
-    CharParser.letter () >>= (fn (x : char) =>
-    many (CharParser.alphanum ()) >>= (fn y =>
+  fun word () : tok Parser =
+    FileCharParser.letter () >>= (fn (x : char) =>
+    many (FileCharParser.alphanum ()) >>= (fn y =>
       case (String.implode (x::y)) of
         "forall" => return ForAll
       | "pi" => return Pi
@@ -155,44 +183,44 @@ struct
       | _ => return (Identifier (String.implode (x::y)))
     ))
 
-  fun integer () : token Parser =
-    many1 (CharParser.digit ()) >>= (fn x =>
+  fun integer () : tok Parser =
+    many1 (FileCharParser.digit ()) >>= (fn x =>
       return (Integer (Option.valOf (Int.fromString (String.implode x))))
     )
 
-  fun unitsymbol () : token Parser =
-    CharParser.lpar () >>= (fn x =>
-    CharParser.rpar () >>= (fn y =>
+  fun unitsymbol () : tok Parser =
+    FileCharParser.lpar () >>= (fn x =>
+    FileCharParser.rpar () >>= (fn y =>
       return UnitSymbol
     ))
 
-  fun lpar () : token Parser =
-    CharParser.lpar () >>= (fn x =>
+  fun lpar () : tok Parser =
+    FileCharParser.lpar () >>= (fn x =>
       return LPar
     )
 
-  fun rpar () : token Parser =
-    CharParser.rpar () >>= (fn x =>
+  fun rpar () : tok Parser =
+    FileCharParser.rpar () >>= (fn x =>
       return RPar
     )
 
-  fun lcurly () : token Parser =
-    CharParser.lcurly () >>= (fn x =>
+  fun lcurly () : tok Parser =
+    FileCharParser.lcurly () >>= (fn x =>
       return LCurly
     )
 
-  fun rcurly () : token Parser =
-    CharParser.rcurly () >>= (fn x =>
+  fun rcurly () : tok Parser =
+    FileCharParser.rcurly () >>= (fn x =>
       return RCurly
     )
 
-  fun comma () : token Parser =
-    CharParser.comma () >>= (fn x =>
+  fun comma () : tok Parser =
+    FileCharParser.comma () >>= (fn x =>
       return Comma
     )
 
-  fun sym () : token Parser =
-    many1 (CharParser.symbol ()) >>= (fn x =>
+  fun sym () : tok Parser =
+    many1 (FileCharParser.symbol ()) >>= (fn x =>
       (case String.implode x of
         "+" => return Plus
       | "-" => return Dash
@@ -212,6 +240,7 @@ struct
     ))
 
   fun tok () : token Parser =
+    position () >>= (fn p =>
     (word ()
     ++ integer ()
     ++ unitsymbol ()
@@ -222,13 +251,20 @@ struct
     ++ sym ())
     >>= (fn x =>
     whitespace () >>= (fn _ =>
-      return x
-    ))
+      let val _ = PolyML.print p
+      in
+        return (p, x)
+      end
+    )))
 
-  fun tokenize (s : CharStream.stream) : TokenStream.stream =
+  fun tokenize (s : CharFileStream.stream) : TokenStream.stream =
     case many (tok ()) s of
-      Ok (x, xs) => { pos = 0, s = TokenVector.fromList (x @ [EOI]) }
-    | Error _ => { pos = 0, s = TokenVector.fromList [] }
+      (Ok (x), s') =>
+        let val p = CharFileStream.position s'
+        in
+          { s = { pos = 0, s = TokenVector.fromList (x @ [(p, EOI)]) } }
+        end
+    | (Error _, s') => { s = { pos = 0, s = TokenVector.fromList [] } }
 
 end
 

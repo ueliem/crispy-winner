@@ -1,9 +1,12 @@
-structure TParser = ParserFunctor(Tokenizer.TokenStream)
+structure TErr = StreamError (structure S = Tokenizer.TokenStream)
+structure TParser = ParserT (structure S = Tokenizer.TokenStream;
+  structure E = TErr)
 
 structure SyntaxParser : 
 sig
-  val satisfies : (Tokenizer.token -> bool) -> Tokenizer.token TParser.Parser
-  val keyword : Tokenizer.token -> Tokenizer.token TParser.Parser
+  val any : Tokenizer.token TParser.Parser
+  val satisfies : (Tokenizer.tok -> bool) -> Tokenizer.token TParser.Parser
+  val keyword : Tokenizer.tok -> Tokenizer.token TParser.Parser
   val eoi : unit -> Tokenizer.token TParser.Parser
   val atom : unit -> Syntax.term TParser.Parser
   val term : unit -> Syntax.term TParser.Parser
@@ -24,15 +27,15 @@ struct
   | LeftAssoc
   | NoAssoc
 
-  fun any () =
+  val any =
     (fn (s : Tokenizer.TokenStream.stream) =>
       (case Tokenizer.TokenStream.uncons s of
-        SOME (x, xs) => TParser.Ok (x, xs)
-      | NONE => fail s))
+        SOME (x, xs) => (TParser.Ok (x), xs)
+      | NONE => (Error (TErr.empty (~1, ~1)), s)))
 
   fun satisfies f = 
-    any () >>= (fn x =>
-    if f x then return x else fail)
+    any >>= (fn x =>
+    if f (#2 x) then return x else fail ())
 
   fun keyword k =
     satisfies (fn x => x = k)
@@ -75,12 +78,12 @@ struct
 
   fun ident () =
     satisfies (fn x => case x of Tokenizer.Identifier _ => true
-    | _ => false) >>= (fn x => case x of Tokenizer.Identifier i => return i
+    | _ => false) >>= (fn x => case x of (_, Tokenizer.Identifier i) => return i
     | _ => raise Fail "not an identifier")
 
   fun integer () =
     satisfies (fn x => case x of Tokenizer.Integer _ => true
-    | _ => false) >>= (fn x => case x of Tokenizer.Integer i => return i
+    | _ => false) >>= (fn x => case x of (_, Tokenizer.Integer i) => return i
     | _ => raise Fail "not an integer ")
 
   fun regionannotation () =
@@ -324,7 +327,7 @@ struct
       operator () >>= (fn x =>
       (case retrieve x of
         SOME y => return y
-      | NONE => fail))
+      | NONE => fail ()))
     end
   and prec_helper level =
     binop level >>= (fn (b, p, a) =>

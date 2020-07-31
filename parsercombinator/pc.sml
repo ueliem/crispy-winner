@@ -2,14 +2,16 @@ signature STRM =
 sig
   type stream
   type elem
+  type pos
   val uncons : stream -> (elem * stream) option
-  val reset : stream * int -> stream
-  val pos : stream -> int
+  val reset : stream * pos -> stream
+  val position : stream -> pos
 end
 
 functor StreamFunctor (S : MONO_VECTOR) : STRM =
 struct
-  type stream = { s : S.vector, pos : int }
+  type pos = int
+  type stream = { s : S.vector, pos : pos }
   type elem = S.elem
 
   fun uncons (strm) = 
@@ -25,13 +27,13 @@ struct
   fun reset (strm, r) =
     { s = #s strm, pos = r }
 
-  fun pos (strm) = #pos strm
+  fun position (strm) = #pos strm
 
 end
 
 functor ParserFunctor (S : STRM) :
 sig
-  include MONADPLUSZERO
+  include MONADZEROPLUS
   type item
   datatype 'output ParseResult =
     Ok of 'output * S.stream
@@ -57,18 +59,18 @@ struct
 
   fun op >>= (p, f) = 
     (fn (strm : S.stream) =>
-    let val pos = S.pos strm
+    let val pos = S.position strm
     in
       (case p strm of
         Ok (x, strm') => f x strm'
       | Error (strm') => Error strm')
     end)
 
-  val zero = (fn (strm : S.stream) => Error strm)
+  val zero = (fn _ => (fn (strm : S.stream) => Error strm))
 
   fun op ++ (p1 : 'a Parser, p2 : 'a Parser) : 'a Parser =
     (fn (strm : S.stream) => 
-    let val pos = S.pos strm
+    let val pos = S.position strm
     in
       (case p1 strm of
         Error e1 =>

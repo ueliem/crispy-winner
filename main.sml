@@ -1,7 +1,7 @@
 use "common/monad.sml";
 use "common/set.sml";
 use "common/assoclist.sml";
-use "parsercombinator/pc.sml";
+(* use "parsercombinator/pc.sml"; *)
 use "newpc.sml";
 use "parsercombinator/charparser.sml";
 use "src/cek/lang.sml";
@@ -44,13 +44,13 @@ let
   val filename = List.nth (CommandLine.arguments (), 0)
   val contents : CharVector.vector = TextIO.input (TextIO.openIn filename)
   val _ = PolyML.print contents
-  val t = Tokenizer.tokenize { pos = 0, s = contents }
+  val t = Tokenizer.tokenize { pos = (0, 0), s = { pos = 0, s = contents } }
   val _ = PolyML.print t
   val syn = SyntaxParser.program () t
   val _ = PolyML.print syn
   val _ = case syn of
-    TParser.Ok (s, _) => (PolyML.print ("OK"))
-  | _ => (PolyML.print ("NOT OK"))
+    (TParser.Ok (s), _) => (PolyML.print ("OK"))
+  | (TParser.Error (e), _) => (PolyML.print e; PolyML.print ("NOT OK"))
 
   (* val _ = case syn of
     TParser.Ok (s, _) => 
