@@ -1,3 +1,5 @@
+exception PExc
+
 signature STRM =
 sig
   type stream
@@ -7,11 +9,15 @@ sig
   val peek : stream -> elem option
   val position : stream -> pos
   val equiv : elem * elem -> bool
+  val pcompare : pos * pos -> int
+  val elem_to_string : elem -> string
+  val pos_to_string : pos -> string
 end
 
 functor StreamFunctor (
   structure S : MONO_VECTOR;
-  val eq : S.elem * S.elem -> bool
+  val eq : S.elem * S.elem -> bool;
+  val estr : S.elem -> string
 ) : STRM =
 struct
   type pos = int
@@ -42,6 +48,15 @@ struct
 
   val equiv = eq
 
+  fun pcompare (p1, p2) =
+    if p1 < p2 then ~1
+    else if p1 = p2 then 0
+    else 1
+
+  val elem_to_string = estr
+
+  val pos_to_string = Int.toString
+
 end
 
 signature PERROR =
@@ -53,6 +68,9 @@ sig
   val unexpected : pos -> elem -> err
   val message : pos -> string -> err
   val empty : pos -> err
+  val errpos : err -> pos
+  val merge : err -> err -> err
+  val tostring : err -> string
 end
 
 functor StreamError (structure S : STRM) :
@@ -77,6 +95,16 @@ struct
   fun unexpected p t = (p, [Unexpected t])
   fun message p m = (p, [Message m])
   fun empty p = (p, [Message ""])
+  fun errpos (p, el) = p
+  fun merge (p1, el1) (p2, el2) =
+    (p1, el1 @ el2)
+  fun tostring (p, el) =
+    String.concatWith " " ((map (fn r => 
+      (case r of
+        Expected x => String.concat ["expected ", S.elem_to_string x]
+      | Unexpected x => String.concat ["unexpected ", S.elem_to_string x]
+      | Message m => m)
+    ) el) @ ["on", S.pos_to_string p])
   fun add x y =
     let val (p, l) = x
     in
@@ -99,7 +127,10 @@ struct
     end
 end
 
-functor ParserT (structure S : STRM; structure E : PERROR; sharing type S.pos = E.pos) : 
+functor ParserT (structure S : STRM;
+  structure E : PERROR;
+  sharing type S.pos = E.pos;
+  sharing type S.elem = E.elem) : 
 sig
   type pst = (S.stream)
   structure PState : MONAD
@@ -111,6 +142,9 @@ sig
   include MONADZEROPLUS where type 'a monad = 'a Parser
 
   val fail : unit -> 'a monad
+  val expected : S.elem -> 'a monad
+  val unexpected : S.elem -> 'a monad
+  val message : string -> 'a monad
   val next : unit -> S.elem monad
   val position : unit -> S.pos monad
   val many : 'a Parser -> 'a list Parser
@@ -143,13 +177,21 @@ struct
       PState.return (Ok x)
     )
 
+  fun choose (e1, s1) (e2, s2) =
+    (case S.pcompare (E.errpos e1, E.errpos e2) of
+      ~1 => (Error e2, s2)
+    | 0 => (Error (E.merge e1 e2), s2)
+    | 1 => (Error e1, s1)
+    | _ => raise PExc
+    )
+
   fun op ++ (p1 : 'a monad, p2 : 'a monad) : 'a monad =
     ((fn s => case p1 s of
       (Ok r, s') => (Ok r, s')
     | (Error e1, s') =>
         (case p2 s of
           (Ok r, s'') => (Ok r, s'')
-        | (Error e2, s'') => (Error e2, s)
+        | (Error e2, s'') => (*(Error e2, s'')*) choose (e1, s') (e2, s'')
         )))
 
   fun position () =
@@ -161,6 +203,16 @@ struct
     position () >>= (fn p =>
       PState.return (Error (E.empty p))
     )
+
+  fun expected t =
+    position () >>= (fn p =>
+      PState.return (Error (E.expected p t)))
+  fun unexpected t =
+    position () >>= (fn p =>
+      PState.return (Error (E.unexpected p t)))
+  fun message m =
+    position () >>= (fn p =>
+      PState.return (Error (E.message p m)))
 
   fun zero () = fail ()
 

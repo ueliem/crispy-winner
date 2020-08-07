@@ -35,7 +35,7 @@ struct
 
   fun satisfies f = 
     any >>= (fn x =>
-    if f (#2 x) then return x else fail ())
+    if f (#2 x) then return x else unexpected (x))
 
   fun keyword k =
     satisfies (fn x => x = k)
@@ -93,7 +93,22 @@ struct
     ))
 
   fun regionset () =
-    lcurly () >>= (fn _ =>
+    (lcurly () >>= (fn _ =>
+    rcurly () >>= (fn _ =>
+      return [])))
+    ++
+    ((lcurly () >>= (fn _ =>
+    ident () >>= (fn r1 =>
+    many (comma () >>= (fn _ =>
+    ident () >>= (fn r =>
+      return r
+    ))) >>= (fn rl =>
+      return (r1::rl)
+    )))) >>= (fn rset =>
+    rcurly () >>= (fn _ =>
+      return rset
+    )))
+    (* lcurly () >>= (fn _ =>
     optional (ident () >>= (fn r1 =>
     many (comma () >>= (fn _ =>
     ident () >>= (fn r =>
@@ -105,7 +120,7 @@ struct
       (case rset of
         SOME rs => return rs
       | NONE => return []
-    ))))
+    )))) *)
 
   fun tyterm () = 
       tytuple ()
@@ -255,13 +270,15 @@ struct
     rpar () >>= (fn _ =>
       return (x, y)
     )))))) >>= (fn z =>
+    colon () >>= (fn _ =>
+    tyterm () >>= (fn returnt =>
     rightarrow () >>= (fn _ =>
     term () >>= (fn e =>
       let val (x, y) = ListPair.unzip z
       in
         return (Syntax.Value (Syntax.Lambda (rs, x, e, y)))
       end
-    )))))
+    )))))))
   and ifelseterm () =
     keyword (Tokenizer.If) >>= (fn _ =>
     term () >>= (fn x =>

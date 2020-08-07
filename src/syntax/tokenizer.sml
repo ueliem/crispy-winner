@@ -127,7 +127,56 @@ struct
   structure TokenStream = 
   struct
     structure TS = StreamFunctor (structure S = TokenVector;
-      val eq = (fn (x, y) => x = y))
+      val eq = (fn (x, y) => x = y);
+      val estr = (fn (p, t) => 
+        (case t of
+          Identifier i => String.concat ["identifier", i]
+        | Integer i => String.concat ["integer ", Int.toString i]
+        | KWInt => "int"
+        | KWBool => "bool"
+        | KWUnit => "unit"
+        | KWUnbox => "unbox"
+        | KWElim => "elim"
+        | KWType => "type"
+        | True => "true"
+        | False => "false"
+        | Select => "sel"
+        | ForAll => "forall"
+        | Pi => "pi"
+        | Sigma => "sigma"
+        | Val => "val"
+        | Let => "let"
+        | LetRegion => "letregion"
+        | At => "at"
+        | In => "in"
+        | End => "end"
+        | Fun => "fun"
+        | Fn => "fn"
+        | If => "if"
+        | Then => "then"
+        | Else => "else"
+        | UnitSymbol => "()"
+        | LPar => "("
+        | RPar => ")"
+        | LCurly => "{"
+        | RCurly => "}"
+        | Plus => "+"
+        | Dash => "-"
+        | Star => "*"
+        | Slash => "/"
+        | Equal => "="
+        | EqualEqual => "=="
+        | NotEqual => "!="
+        | Less => "<"
+        | Greater => ">"
+        | LessEq => "<="
+        | GreaterEq => ">="
+        | RightArrow => "->"
+        | RightDashArrow => "=>"
+        | Colon => ":"
+        | Comma => ","
+        | EOI => "EOI"
+        )))
 
     type pos = int * int
     type stream = { s : TS.stream }
@@ -141,9 +190,23 @@ struct
     fun position (strm) =
       (case TS.peek (#s strm) of
         SOME (p, t) => p
-      | NONE => raise Match)
+      | NONE => (~1, ~1)) (* raise Fail "pos") *)
 
     val equiv = TS.equiv
+
+    fun pcompare ((l1, c1), (l2, c2)) =
+      if l1 < l2 then ~1
+      else if l1 = l2 then
+        if c1 < c2 then ~1
+        else if c1 = c2 then 0
+        else 1
+      else 1
+
+    fun pos_to_string (l, c) =
+      String.concat ["line ", Int.toString l, " column ", Int.toString c]
+
+    fun elem_to_string (p, t) = 
+      String.concat [TS.elem_to_string (p, t), "(", pos_to_string p, ")"]
 
     fun peek (strm) = TS.peek (#s strm)
   end

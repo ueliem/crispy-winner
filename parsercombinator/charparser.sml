@@ -1,6 +1,7 @@
 structure CharStream =
   StreamFunctor (structure S = CharVector;
-    val eq = (fn (x, y) => x = y))
+    val eq = (fn (x, y) => x = y);
+    val estr = (fn x => Char.toString x))
 
 structure CharFileStream :
 sig
@@ -29,6 +30,19 @@ struct
   fun position (strm) = #pos strm
 
   val equiv = CS.equiv
+
+  fun pcompare ((l1, c1), (l2, c2)) =
+    if l1 < l2 then ~1
+    else if l1 = l2 then
+      if c1 < c2 then ~1
+      else if c1 = c2 then 0
+      else 1
+    else 1
+
+  val elem_to_string = CS.elem_to_string
+
+  fun pos_to_string (l, c) =
+    String.concat ["line ", Int.toString l, " column ", Int.toString c]
 
   fun peek (strm) = CS.peek (#s strm)
 
