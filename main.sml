@@ -1,17 +1,14 @@
 use "common/monad.sml";
 use "common/set.sml";
 use "common/assoclist.sml";
-(* use "parsercombinator/pc.sml"; *)
-use "newpc.sml";
+use "parsercombinator/newpc.sml";
 use "parsercombinator/charparser.sml";
-use "src/cek/lang.sml";
-use "src/cek/check.sml";
-use "src/cek/interp.sml";
-
+use "src/core/lang.sml";
+use "src/core/check.sml";
+use "src/core/interp.sml";
 use "src/syntax/lang.sml";
 use "src/syntax/tokenizer.sml";
 use "src/syntax/parser.sml";
-
 (* use "src/anf/anf.sml"; *)
 (* use "src/ssa/ssa.sml"; *)
 
