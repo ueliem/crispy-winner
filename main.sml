@@ -3,17 +3,18 @@ use "common/set.sml";
 use "common/assoclist.sml";
 use "parsercombinator/newpc.sml";
 use "parsercombinator/charparser.sml";
-use "src/core/lang.sml";
+(* use "src/core/lang.sml";
 use "src/core/check.sml";
-use "src/core/interp.sml";
+use "src/core/interp.sml";*)
 use "src/syntax/lang.sml";
 use "src/syntax/tokenizer.sml";
 use "src/syntax/parser.sml";
-(* use "src/anf/anf.sml"; *)
+use "src/syntax/check.sml";
+use "src/anf/anf.sml";
 (* use "src/ssa/ssa.sml"; *)
 
-open Lang
-open Interp
+open Syntax
+(* open Interp *)
 
 fun main () =
 let
@@ -47,8 +48,15 @@ let
   val syn = SyntaxParser.program () t
   val _ = PolyML.print syn
   val _ = case syn of
-    (TParser.Ok (s), _) => (PolyML.print (s); PolyML.print ("OK"))
-  | (TParser.Error (e), _) => (PolyML.print (TErr.tostring e); PolyML.print ("NOT OK"))
+    (TParser.Ok (s), _) =>
+      let
+        val _ = (PolyML.print (s); PolyML.print ("OK"))
+        val _ = PolyML.print (TypeCheck.checkProgram s)
+      in
+        ()
+      end
+  | (TParser.Error (e), _) =>
+      (PolyML.print (TErr.tostring e); PolyML.print ("NOT OK"); ())
 
   (* val _ = case syn of
     TParser.Ok (s, _) => 

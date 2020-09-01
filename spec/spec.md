@@ -46,7 +46,7 @@ header-includes:
 
 <funty> ::= `(' <ty> [ `,' <ty> ]+ `)' `->' <effect> <ty>
 
-<regfunty> ::= `forall' <regionset> <ty>
+<regfunty> ::= `forall' <regionset> <funty>
 
 <boxty> ::= <ty> `at' <regionvar>
 
@@ -67,7 +67,7 @@ header-includes:
 
 <fundeclaration> ::= `fun' <regionset> <ident> [ `(' <ident> `:' <ty> `)' ]+ `:' <ty> `=' <term>
 
-<tydeclaration> ::= `type' <regionset> <ident> `=' <ty>
+<tydeclaration> ::= `type' <ident> `=' <ty>
 
 \end{grammar}
 

@@ -1,375 +1,219 @@
 structure ANF : sig
-  structure FreshVarMonad : MONAD
-
-  datatype var = 
-    V of string
-  | GenV of int
-
+  type var = string
   type regionvar = string
   type pointername = int
+  type regionset = regionvar Set.set
   type effect = regionvar Set.set
   type operator = string
 
-  datatype boxty = 
-    BoxIntTy of regionvar
-  | BoxBoolTy of regionvar
-  | BoxUnitTy of regionvar
-  | BoxTupleTy of ty list * regionvar
-  | BoxFuncTy of ty * ty * effect * regionvar
-  | BoxRegFuncTy of regionvar * ty * effect * regionvar
-
-  and ty =
+  datatype ty =
     IntTy
   | BoolTy
   | UnitTy
-  | BoxedTy of boxty
+  | TupleTy of ty list
+  | FuncTy of regionset * ty list * ty * effect
+  | BoxedTy of ty * regionvar
 
-  datatype abs = 
-    Lambda of var * term * Lang.ty * regionvar
-  | RegionLambda of regionvar * abs * regionvar
-  
   and value =
     IntLit of int
   | BoolLit of bool
   | UnitLit
+  | Lambda of regionset * (var * ty) list * ty * effect * term
+  | Tuple of term list
   | BarePointer of regionvar * pointername
 
-  and boxvalue = 
-    BoxIntLit of int * regionvar
-  | BoxBoolLit of bool * regionvar
-  | BoxUnitLit of regionvar
-  | BoxAbs of abs
-  | BoxTuple of atom list * regionvar
-  | BoxBarePointer of regionvar * pointername * regionvar
-
-  and atom = 
-    Var of var
-  | Value of value
-  | BoxedValue of boxvalue
+  and atom =
+    Value of value
+  | Var of var
 
   and comp =
     Atom of atom
-  | App of atom * atom
-  | PrimApp of operator * atom * atom
   | Select of int * atom
+  | Box of atom * regionvar
   | Unbox of atom
-  | RegionElim of var * regionvar * regionvar
+  | RegionElim of regionset * atom
+  | App of atom * atom list
+  | PrimApp of operator * atom * atom
 
-  and term = 
-    Comp of comp
-  | Let of var * comp * term
+  and term =
+    AtomTerm of atom
+  | Let of var * comp * term * ty
   | LetRegion of regionvar * term
-  | IfElse of atom * term * term
+  | IfElse of atom * atom * atom
 
-  val substRegVarBoxTy : (regionvar * regionvar) -> boxty -> boxty
+  and declaration = 
+    DeclType of var * ty
+  | DeclVal of var * ty * term
+  | DeclFun of var * var list * ty list * ty * term
+
+  and program = 
+    Prog of declaration list
+
+  val eqty : (ty * ty) -> bool
   val substRegVarTy : (regionvar * regionvar) -> ty -> ty
   val substRegVar : (regionvar * regionvar) -> term -> term
-  val substRegVarComp : (regionvar * regionvar) -> comp -> comp
-  val substRegVarAtom : (regionvar * regionvar) -> atom -> atom
   val substRegVarValue : (regionvar * regionvar) -> value -> value
-  val substRegVarBoxValue : (regionvar * regionvar) -> boxvalue -> boxvalue
-  val substRegVarAbs : (regionvar * regionvar) -> abs -> abs
+  val substRegVarRegSet : (regionvar * regionvar) -> regionset -> regionset
 
-  val freshvar : unit -> var FreshVarMonad.monad
-  val transformAtom : Lang.term -> (atom -> term FreshVarMonad.monad) -> term FreshVarMonad.monad
-  val transformTerm : Lang.term -> term FreshVarMonad.monad
-  val transformValue : Lang.value -> (atom -> term FreshVarMonad.monad) -> term FreshVarMonad.monad
-  val transformBoxedValue : Lang.boxvalue -> (atom -> term FreshVarMonad.monad) -> term FreshVarMonad.monad
-  val transformBoxedAbs : Lang.abs -> abs FreshVarMonad.monad
-
-  val transform : Lang.term -> term
-
-  val isValue : term -> bool
+  val tostringrs : regionset -> string
+  val tostringty : ty -> string
+  (* val tostringval : value -> string
+  val tostringterm : term -> string *)
 end
 =
 struct
-  datatype var = 
-    V of string
-  | GenV of int
-
+  type var = string
   type regionvar = string
   type pointername = int
+  type regionset = regionvar Set.set
   type effect = regionvar Set.set
   type operator = string
 
-  datatype boxty = 
-    BoxIntTy of regionvar
-  | BoxBoolTy of regionvar
-  | BoxUnitTy of regionvar
-  | BoxTupleTy of ty list * regionvar
-  | BoxFuncTy of ty * ty * effect * regionvar
-  | BoxRegFuncTy of regionvar * ty * effect * regionvar
-
-  and ty =
+  datatype ty =
     IntTy
   | BoolTy
   | UnitTy
-  | BoxedTy of boxty
+  | TupleTy of ty list
+  | FuncTy of regionset * ty list * ty * effect
+  (* | RegFuncTy of regionvar * ty * effect *)
+  | BoxedTy of ty * regionvar
 
-  datatype abs = 
-    Lambda of var * term * Lang.ty * regionvar
-  | RegionLambda of regionvar * abs * regionvar
-  
   and value =
     IntLit of int
   | BoolLit of bool
   | UnitLit
+  | Lambda of regionset * (var * ty) list * ty * effect * term
+  | Tuple of term list
   | BarePointer of regionvar * pointername
 
-  and boxvalue = 
-    BoxIntLit of int * regionvar
-  | BoxBoolLit of bool * regionvar
-  | BoxUnitLit of regionvar
-  | BoxAbs of abs
-  | BoxTuple of atom list * regionvar
-  | BoxBarePointer of regionvar * pointername * regionvar
-
-  and atom = 
-    Var of var
-  | Value of value
-  | BoxedValue of boxvalue
-
-  and comp =
-    Atom of atom
-  | App of atom * atom
-  | PrimApp of operator * atom * atom
-  | Select of int * atom
-  | Unbox of atom
-  | RegionElim of var * regionvar * regionvar
-
   and term = 
-    Comp of comp
-  | Let of var * comp * term
+    Value of value
+  | Var of var
+  | Select of int * term
+  | Box of term * regionvar
+  | Unbox of term
+  | Let of var * term * term * ty
   | LetRegion of regionvar * term
-  | IfElse of atom * term * term
+  | RegionElim of regionset * term
+  | IfElse of term * term * term
+  | App of term * term list
+  | PrimApp of operator * term * term
 
-  structure FreshVarMonad = StateFunctor (type s = int)
-  open FreshVarMonad
+  and declaration = 
+    DeclType of var * ty
+  | DeclVal of var * ty * term
+  | DeclFun of var * var list * ty list * ty * term
 
-  fun substRegVarBoxTy (dst, newr) (BoxIntTy rho) = 
-      BoxIntTy (if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxBoolTy rho) = 
-      BoxBoolTy (if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxUnitTy rho) = 
-      BoxUnitTy (if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxTupleTy (t, rho)) = 
-      BoxTupleTy ( map (substRegVarTy (dst, newr)) t, 
-        if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxFuncTy (t1, t2, phi, rho)) =
-      BoxFuncTy (substRegVarTy (dst, newr) t1, 
-        substRegVarTy (dst, newr) t2,
-        map (fn r => if dst = r then newr else r) phi,
-        if dst = rho then newr else rho)
-  | substRegVarBoxTy (dst, newr) (BoxRegFuncTy (rv, t, phi, rho)) =
-      BoxRegFuncTy (rv, substRegVarTy (dst, newr) t,
-        map (fn r => if dst = r then newr else r) phi,
-        if dst = rho then newr else rho)
+  and program = 
+    Prog of declaration list
 
-  and substRegVarTy (dst, newr) (IntTy) = IntTy
+  fun eqty (IntTy, IntTy) = true
+  | eqty (BoolTy, BoolTy) = true
+  | eqty (UnitTy, UnitTy) = true
+  | eqty (TupleTy t1, TupleTy t2) =
+      List.all (fn x => x = true) (map eqty (ListPair.zipEq (t1, t2)))
+  | eqty (FuncTy (rs1, tl1, rt1, phi1), FuncTy (rs2, tl2, rt2, phi2)) =
+      List.all (fn x => x = true) (map eqty (ListPair.zipEq (tl1, tl2)))
+      andalso eqty (rt1, rt2) andalso Set.eq rs1 rs2 andalso Set.eq phi1 phi2
+  | eqty (BoxedTy (t1, r1), BoxedTy (t2, r2)) = eqty (t1, t2) andalso r1 = r2
+  | eqty (_, _) = false
+
+  fun substRegVarTy (dst, newr) (IntTy) = IntTy
   | substRegVarTy (dst, newr) (BoolTy) = BoolTy
   | substRegVarTy (dst, newr) (UnitTy) = UnitTy
-  | substRegVarTy (dst, newr) (BoxedTy t) = 
-      BoxedTy (substRegVarBoxTy (dst, newr) t)
+  | substRegVarTy (dst, newr) (TupleTy t) = 
+      TupleTy (map (substRegVarTy (dst, newr)) t)
+  | substRegVarTy (dst, newr) (FuncTy (rvl, t1, t2, phi)) =
+      FuncTy (rvl, map (substRegVarTy (dst, newr)) t1, 
+        substRegVarTy (dst, newr) t2,
+        Set.map (fn r => if dst = r then newr else r) phi)
+  | substRegVarTy (dst, newr) (BoxedTy (t, r)) = 
+      BoxedTy (substRegVarTy (dst, newr) t, if dst = r then newr else r)
 
-  fun substRegVarAtom (dst, newr) (Var v) = Var v
-  | substRegVarAtom (dst, newr) (Value v) = Value (substRegVarValue (dst, newr) v)
-  | substRegVarAtom (dst, newr) (BoxedValue v) = 
-      BoxedValue (substRegVarBoxValue (dst, newr) v)
-
-  and substRegVarComp (dst, newr) (Atom a) = Atom (substRegVarAtom (dst, newr) a)
-  | substRegVarComp (dst, newr) (App (m1, m2)) = 
-      App (substRegVarAtom (dst, newr) m1, substRegVarAtom (dst, newr) m2)
-  | substRegVarComp (dst, newr) (PrimApp (opr, m1, m2)) = 
-      PrimApp (opr, substRegVarAtom (dst, newr) m1, substRegVarAtom (dst, newr) m2)
-  | substRegVarComp (dst, newr) (Select (i, m)) =
-      Select (i, substRegVarAtom (dst, newr) m)
-  | substRegVarComp (dst, newr) (Unbox m) = 
-      Unbox (substRegVarAtom (dst, newr) m)
-  | substRegVarComp (dst, newr) (RegionElim (f, r1, r2)) = 
-      RegionElim (f, if dst = r1 then newr else r1, if dst = r2 then newr else r2)
-
-  and substRegVar (dst, newr) (Comp c) = Comp (substRegVarComp (dst, newr) c)
-  | substRegVar (dst, newr) (Let (x, m1, m2)) = 
-      Let (x, substRegVarComp (dst, newr) m1, substRegVar (dst, newr) m2)
+  fun substRegVar (dst, newr) (Value v) = Value (substRegVarValue (dst, newr) v)
+  | substRegVar (dst, newr) (Var v) = Var v
+  | substRegVar (dst, newr) (Select (i, m)) =
+      Select (i, substRegVar (dst, newr) m)
+  | substRegVar (dst, newr) (Box (m, r)) = 
+      Box (substRegVar (dst, newr) m, if dst = r then newr else r)
+  | substRegVar (dst, newr) (Unbox m) = 
+      Unbox (substRegVar (dst, newr) m)
+  | substRegVar (dst, newr) (Let (x, m1, m2, argt)) = 
+      Let (x, substRegVar (dst, newr) m1, substRegVar (dst, newr) m2, argt)
   | substRegVar (dst, newr) (LetRegion (r, m)) = 
       LetRegion (r, substRegVar (dst, newr) m)
   | substRegVar (dst, newr) (IfElse (m1, m2, m3)) = 
-      IfElse (substRegVarAtom (dst, newr) m1, substRegVar (dst, newr) m2, substRegVar (dst, newr) m3)
+      IfElse (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2, substRegVar (dst, newr) m3)
+  | substRegVar (dst, newr) (RegionElim (rs, m)) = 
+      RegionElim (Set.map (fn r => if dst = r then newr else r) rs, substRegVar (dst, newr) m)
+  | substRegVar (dst, newr) (App (m1, m2)) = 
+      App (substRegVar (dst, newr) m1, map (substRegVar (dst, newr)) m2)
+  | substRegVar (dst, newr) (PrimApp (opr, m1, m2)) = 
+      PrimApp (opr, substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
 
   and substRegVarValue (dst, newr) (IntLit i) = IntLit i
   | substRegVarValue (dst, newr) (BoolLit b) = BoolLit b
   | substRegVarValue (dst, newr) (UnitLit) = UnitLit
+  | substRegVarValue (dst, newr) (Lambda (rs, args, rt, phi, m)) = 
+      Lambda (rs, map (fn (x, t) => (x, substRegVarTy (dst, newr) t)) args,
+        substRegVarTy (dst, newr) rt,
+        Set.map (fn r => if dst = r then newr else r) phi,
+        substRegVar (dst, newr) m)
+  | substRegVarValue (dst, newr) (Tuple m) = 
+      Tuple (map (substRegVar (dst, newr)) m)
   | substRegVarValue (dst, newr) (BarePointer (r, p)) = (BarePointer (r, p))
 
-  and substRegVarBoxValue (dst, newr) (BoxIntLit (i, r)) = BoxIntLit (i, if dst = r then newr else r)
-  | substRegVarBoxValue (dst, newr) (BoxBoolLit (b, r)) = BoxBoolLit (b, if dst = r then newr else r)
-  | substRegVarBoxValue (dst, newr) (BoxUnitLit r) = BoxUnitLit (if dst = r then newr else r)
-  | substRegVarBoxValue (dst, newr) (BoxAbs a) = BoxAbs (substRegVarAbs (dst, newr) a)
-  | substRegVarBoxValue (dst, newr) (BoxTuple (m, r)) = 
-      BoxTuple (map (substRegVarAtom (dst, newr)) m, if dst = r then newr else r)
-  | substRegVarBoxValue (dst, newr) (BoxBarePointer (r1, p, r2)) =
-      BoxBarePointer (r1, p, if dst = r2 then newr else r2)
+  and substRegVarRegSet (dst, newr) rs =
+    Set.map (fn x => if x = dst then newr else x) rs
 
-  and substRegVarAbs (dst, newr) (Lambda (x, m, argt, r)) = 
-      Lambda (x, substRegVar (dst, newr) m, argt, if dst = r then newr else r)
-  | substRegVarAbs (dst, newr) (RegionLambda (r1, m, r2)) = 
-      RegionLambda (r1, substRegVarAbs (dst, newr) m, if dst = r2 then newr else r2)
+  fun tostringrs rs =
+    String.concat ["{", (String.concatWith ", " (Set.toList rs)), "}"]
+  (*datatype ty =
+    IntTy
+  | BoolTy
+  | UnitTy
+  | TupleTy of ty list
+  | FuncTy of regionset * ty list * ty * effect
+  | BoxedTy of ty * regionvar*)
 
-  fun freshvar () = 
-    get >>= (fn (s : int) =>
-    (put (s + 1)) >>= (fn (_ : unit) =>
-      return (GenV (s))
-    ))
+  fun tostringty (IntTy) = "int"
+  | tostringty (BoolTy) = "bool"
+  | tostringty (UnitTy) = "unit"
+  | tostringty (TupleTy tl) =
+      String.concat ["(", String.concatWith ", " (map tostringty tl), ")"]
+  | tostringty (FuncTy (rs, argt, rt, phi)) =
+      String.concat ["forall ", tostringrs rs,
+        "(", String.concatWith ", " (map tostringty argt), ") -> ",
+        tostringrs phi, " ", tostringty rt]
+  | tostringty (BoxedTy (t, r)) = String.concat [tostringty t, " at ", r]
 
-  fun transformAtom (Lang.Value v) k = transformValue v k
-  | transformAtom (Lang.BoxedValue v) k = transformBoxedValue v k
-  | transformAtom (Lang.Var v) k = k (Var (V v))
-  | transformAtom (Lang.Select (i, m)) k = 
-      transformAtom m (fn m' =>
-      freshvar () >>= (fn x =>
-      k (Var x) >>= (fn x' =>
-        return (Let (x, Select (i, m'), x'))
-      )))
-  | transformAtom (Lang.Unbox m) k = 
-      transformAtom m (fn m' =>
-      freshvar () >>= (fn x =>
-      k (Var x) >>= (fn x' =>
-        return (Let (x, Unbox m', x'))
-      )))
-  | transformAtom (Lang.Let (x, m1, m2, argt)) k = 
-      transformAtom m1 (fn m1' => 
-      (transformAtom m2 k) >>= (fn m2' => 
-        return (Let (V x, Atom m1', m2'))
-      ))
-  | transformAtom (Lang.LetRegion (r, m)) k = 
-      (transformAtom m k) >>= (fn m' => 
-        return (LetRegion (r, m'))
-      )
-  | transformAtom (Lang.RegionElim (f, r1, r2)) k = 
-      freshvar () >>= (fn x =>
-      k (Var x) >>= (fn x' =>
-        return (Let (x, RegionElim (V f, r1, r2), x'))
-      ))
-  | transformAtom (Lang.IfElse (m1, m2, m3)) k = 
-      transformAtom m1 (fn m1' => 
-      (transformAtom m2 k) >>= (fn m2' => 
-      (transformAtom m3 k) >>= (fn m3' => 
-        return (IfElse (m1', m2', m3'))
-      )))
-  | transformAtom (Lang.App (m1, m2)) k = 
-      transformAtom m1 (fn m1' =>
-      transformAtom m2 (fn m2' =>
-      freshvar () >>= (fn x =>
-      k (Var x) >>= (fn x' =>
-        return (Let (x, App (m1', m2'), x'))
-      ))))
-  | transformAtom (Lang.PrimApp (opr, m1, m2)) k = 
-      transformAtom m1 (fn m1' =>
-      transformAtom m2 (fn m2' =>
-      freshvar () >>= (fn x =>
-      k (Var x) >>= (fn x' =>
-        return (Let (x, PrimApp (opr, m1', m2'), x'))
-      ))))
+  (*and value =
+    IntLit of int
+  | BoolLit of bool
+  | UnitLit
+  | Lambda of regionset * (var * ty) list * ty * effect * term
+  | Tuple of term list
+  | BarePointer of regionvar * pointername
 
-  and transformComp (Lang.Value v) k = raise Fail ""
-  | transformComp (Lang.BoxedValue v) k = raise Fail ""
-  | transformComp (Lang.Var v) k = raise Fail ""
-  | transformComp (Lang.Select (i, m)) k = raise Fail ""
-  | transformComp (Lang.Unbox m) k = raise Fail ""
-  | transformComp (Lang.Let (x, m1, m2, argt)) k = raise Fail ""
-  | transformComp (Lang.LetRegion (r, m)) k = raise Fail ""
-  | transformComp (Lang.RegionElim (f, r1, r2)) k = raise Fail ""
-  | transformComp (Lang.IfElse (m1, m2, m3)) k = raise Fail ""
-  | transformComp (Lang.App (m1, m2)) k = raise Fail ""
-  | transformComp (Lang.PrimApp (opr, m1, m2)) k = raise Fail ""
+  and term = 
+    Value of value
+  | Var of var
+  | Select of int * term
+  | Box of term * regionvar
+  | Unbox of term
+  | Let of var * term * term * ty
+  | LetRegion of regionvar * term
+  | RegionElim of regionset * term
+  | IfElse of term * term * term
+  | App of term * term list
+  | PrimApp of operator * term * term
 
-  and transformTerm (Lang.Value v) = 
-      transformValue v (fn v' =>
-        return (Comp (Atom v'))
-      )
-  | transformTerm (Lang.BoxedValue v) = 
-      transformBoxedValue v (fn v' =>
-        return (Comp (Atom v'))
-      )
-  | transformTerm (Lang.Var v) = return (Comp (Atom (Var (V v))))
-  | transformTerm (Lang.Select (i, m)) = 
-      transformAtom m (fn m' =>
-        return (Comp (Select (i, m')))
-      )
-  | transformTerm (Lang.Unbox m) = 
-      transformAtom m (fn m' =>
-        return (Comp (Unbox m'))
-      )
-  | transformTerm (Lang.Let (x, m1, m2, argt)) = 
-      transformAtom m1 (fn m1' =>
-      transformTerm m2 >>= (fn m2' =>
-        return (Let (V x, Atom m1', m2'))
-      ))
-  | transformTerm (Lang.LetRegion (r, m)) = 
-      transformTerm m >>= (fn m' =>
-        return (LetRegion (r, m'))
-      )
-  | transformTerm (Lang.RegionElim (f, r1, r2)) = 
-      return (Comp (RegionElim (V f, r1, r2)))
-  | transformTerm (Lang.IfElse (m1, m2, m3)) = 
-      transformAtom m1 (fn m1' =>
-      transformTerm m2 >>= (fn m2' =>
-      transformTerm m3 >>= (fn m3' =>
-        return (IfElse (m1', m2', m3'))
-      )))
-  | transformTerm (Lang.App (m1, m2)) = 
-      transformAtom m1 (fn m1' =>
-      transformAtom m2 (fn m2' =>
-        return (Comp (App (m1', m2')))
-      ))
-  | transformTerm (Lang.PrimApp (opr, m1, m2)) = 
-      transformAtom m1 (fn m1' =>
-      transformAtom m2 (fn m2' =>
-        return (Comp (PrimApp (opr, m1', m2')))
-      ))
+  and declaration = 
+    DeclType of var * ty
+  | DeclVal of var * ty * term
+  | DeclFun of var * var list * ty list * ty * term*)
 
-  and transformValue (Lang.IntLit i) k = k (Value (IntLit i))
-  | transformValue (Lang.BoolLit b) k = k (Value (BoolLit b))
-  | transformValue (Lang.UnitLit) k = k (Value (UnitLit))
-  | transformValue (Lang.BarePointer (r, p)) k = k (Value (BarePointer (r, p)))
 
-  and transformBoxedValue (Lang.BoxIntLit (i, r)) k = k (BoxedValue (BoxIntLit (i, r)))
-  | transformBoxedValue (Lang.BoxBoolLit (b, r)) k = k (BoxedValue (BoxBoolLit (b, r)))
-  | transformBoxedValue (Lang.BoxUnitLit r) k = k (BoxedValue (BoxUnitLit r))
-  | transformBoxedValue (Lang.BoxAbs a) k = 
-      transformBoxedAbs a >>= (fn a' =>
-        k (BoxedValue (BoxAbs a'))
-      )
-  | transformBoxedValue (Lang.BoxTuple (m, r)) k = 
-      let
-        fun f (m', []) = 
-            k (BoxedValue (BoxTuple (m', r))) >>= (fn m'' =>
-              return m''
-            )
-        | f (m', x::xs) = 
-            transformAtom x (fn x' =>
-              f (m' @ [x'], xs)
-            )
-      in
-        f ([], m)
-      end
-  | transformBoxedValue (Lang.BoxBarePointer (r1, p, r2)) k = k (BoxedValue (BoxBarePointer (r1, p, r2)))
-
-  and transformBoxedAbs (Lang.Lambda (x, m, t, r)) = 
-      transformTerm m >>= (fn m' =>
-        return (Lambda (V x, m', t, r))
-      )
-  | transformBoxedAbs (Lang.RegionLambda (r1, a, r2)) = 
-      transformBoxedAbs a >>= (fn a' =>
-        return (RegionLambda (r1, a', r2))
-      )
-
-  and transform m = #1 (runState (transformTerm m) 0)
-
-  fun isValue (Comp (Atom _)) = true
-  | isValue (Comp c) = false
-  | isValue (Let (x, m1, m2)) = false
-  | isValue (LetRegion (r, m)) = false
-  | isValue (IfElse (m1, m2, m3)) = false
 
 end
+

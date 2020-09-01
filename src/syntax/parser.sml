@@ -126,8 +126,10 @@ struct
       tytuple ()
     ++ typaren ()
     ++ tyliteral ()
-    ++ tyregabs ()
+    ++ tyfun ()
   and tyfun () = 
+    keyword (Tokenizer.ForAll) >>= (fn _ =>
+    regionset () >>= (fn rvl =>
     lpar () >>= (fn _ =>
     tyterm () >>= (fn x =>
     many (comma () >>= (fn _ =>
@@ -138,8 +140,8 @@ struct
     symbol Tokenizer.RightDashArrow >>= (fn _ => 
     regionset () >>= (fn phi => 
     tyterm () >>= (fn y =>
-      return (Syntax.FuncTy (x::rl, y, phi))
-    )))))))
+      return (Syntax.FuncTy (Set.fromList rvl, x::rl, y, Set.fromList phi))
+    )))))))))
   and tytuple () =
     lpar () >>= (fn _ =>
     tyterm () >>= (fn x =>
@@ -176,13 +178,13 @@ struct
       return (Syntax.BoxedTy (Syntax.UnitTy, r))
     ))) ++ return Syntax.UnitTy
     )
-  and tyregabs () =
+  (* and tyregabs () =
     keyword (Tokenizer.ForAll) >>= (fn _ =>
     ident () >>= (fn r1 =>
     regionset () >>= (fn phi =>
     tyterm () >>= (fn t =>
       return (Syntax.RegFuncTy (r1, t, phi))
-    ))))
+    )))) *)
 
   fun atom () =
     parenterm ()
@@ -240,7 +242,7 @@ struct
     keyword (Tokenizer.KWElim) >>= (fn _ =>
     regionset () >>= (fn rs =>
     term () >>= (fn x =>
-      return (Syntax.RegionElim (rs, x))
+      return (Syntax.RegionElim (Set.fromList rs, x))
     )))
   and literal () = 
     (integer () >>= (fn i =>
@@ -271,14 +273,16 @@ struct
       return (x, y)
     )))))) >>= (fn z =>
     colon () >>= (fn _ =>
+    regionset () >>= (fn eff =>
     tyterm () >>= (fn returnt =>
     rightarrow () >>= (fn _ =>
     term () >>= (fn e =>
       let val (x, y) = ListPair.unzip z
       in
-        return (Syntax.Value (Syntax.Lambda (rs, x, e, y)))
+        return (Syntax.Value (
+          Syntax.Lambda (Set.fromList rs, z, returnt, Set.fromList eff, e)))
       end
-    )))))))
+    ))))))))
   and ifelseterm () =
     keyword (Tokenizer.If) >>= (fn _ =>
     term () >>= (fn x =>
@@ -362,12 +366,11 @@ struct
 
   fun tydeclaration () =
     keyword (Tokenizer.KWType) >>= (fn _ =>
-    regionset () >>= (fn r =>
     ident () >>= (fn x =>
     equal () >>= (fn _ =>
     tyterm () >>= (fn y =>
-      return (Syntax.DeclType (r, x, y))
-    )))))
+      return (Syntax.DeclType (x, y))
+    ))))
 
   fun valdeclaration () =
     keyword (Tokenizer.Val) >>= (fn _ =>

@@ -22,7 +22,7 @@ struct
     (case CS.uncons (#s strm) of
       SOME (c, s') =>
         (case c of
-          #"\n" => SOME (c, { s = s', pos = (row + 1, col) })
+          #"\n" => SOME (c, { s = s', pos = (row + 1, 0) })
         | _ => SOME (c, { s = s', pos = (row, col + 1) }))
     | NONE => NONE)
   end

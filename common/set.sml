@@ -2,6 +2,7 @@ signature SET =
 sig
   type ''a set
   val emptyset : ''a set
+  val singleton : ''a -> ''a set
   val member : ''a -> ''a set -> bool
   val isempty : ''a set -> bool
   val size : ''a set -> int
@@ -13,13 +14,18 @@ sig
   val difference : ''a set -> ''a set -> ''a set
   (* val subset : ''a set -> ''a set -> ''a set*)
   val eq : ''a set -> ''a set -> bool
+  val map : (''a -> ''b) -> ''a set -> ''b set
+  val fromList : ''a list -> ''a set
+  val toList : ''a set -> ''a list
 end
 
-structure Set : SET =
+structure Set :> SET =
 struct
   type ''a set = ''a list
 
   val emptyset = []
+
+  fun singleton x = [x]
 
   fun member i s =
     List.exists (fn x => x = i) s
@@ -46,6 +52,13 @@ struct
   fun eq s t =
     List.length s = List.length t
     andalso List.all (fn x => member x t) s
+
+  val map = List.map
+
+  fun fromList [] = emptyset
+  | fromList (x::xs) = insert x (fromList xs)
+
+  fun toList s = s
 
 end
 
