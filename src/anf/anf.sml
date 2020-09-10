@@ -1,219 +1,187 @@
-structure ANF : sig
-  type var = string
-  type regionvar = string
-  type pointername = int
-  type regionset = regionvar Set.set
-  type effect = regionvar Set.set
-  type operator = string
-
-  datatype ty =
-    IntTy
-  | BoolTy
-  | UnitTy
-  | TupleTy of ty list
-  | FuncTy of regionset * ty list * ty * effect
-  | BoxedTy of ty * regionvar
-
-  and value =
-    IntLit of int
-  | BoolLit of bool
-  | UnitLit
-  | Lambda of regionset * (var * ty) list * ty * effect * term
-  | Tuple of term list
-  | BarePointer of regionvar * pointername
-
-  and atom =
-    Value of value
-  | Var of var
-
-  and comp =
-    Atom of atom
-  | Select of int * atom
-  | Box of atom * regionvar
-  | Unbox of atom
-  | RegionElim of regionset * atom
-  | App of atom * atom list
-  | PrimApp of operator * atom * atom
-
-  and term =
-    AtomTerm of atom
-  | Let of var * comp * term * ty
-  | LetRegion of regionvar * term
-  | IfElse of atom * atom * atom
-
-  and declaration = 
-    DeclType of var * ty
-  | DeclVal of var * ty * term
-  | DeclFun of var * var list * ty list * ty * term
-
-  and program = 
-    Prog of declaration list
-
-  val eqty : (ty * ty) -> bool
-  val substRegVarTy : (regionvar * regionvar) -> ty -> ty
-  val substRegVar : (regionvar * regionvar) -> term -> term
-  val substRegVarValue : (regionvar * regionvar) -> value -> value
-  val substRegVarRegSet : (regionvar * regionvar) -> regionset -> regionset
-
-  val tostringrs : regionset -> string
-  val tostringty : ty -> string
-  (* val tostringval : value -> string
-  val tostringterm : term -> string *)
+structure ANF :
+sig
+  structure ANFFVM : 
+  sig
+    include MONAD
+    val fresh : ANFTerm.var monad
+  end
+  val normalize : Term.term -> ANFTerm.term ANFFVM.monad
+  val normalizeterm : Term.term -> (ANFTerm.term -> ANFTerm.term ANFFVM.monad) -> ANFTerm.term ANFFVM.monad
+  val normalizename : Term.term -> (ANFTerm.var -> ANFTerm.term ANFFVM.monad) -> ANFTerm.term ANFFVM.monad
+  val normalizenames : Term.term list -> (ANFTerm.var list -> ANFTerm.term ANFFVM.monad) -> ANFTerm.term ANFFVM.monad
+  val normalizevalue : Term.value -> (ANFTerm.var -> ANFTerm.term ANFFVM.monad) -> ANFTerm.term ANFFVM.monad
 end
 =
 struct
-  type var = string
-  type regionvar = string
-  type pointername = int
-  type regionset = regionvar Set.set
-  type effect = regionvar Set.set
-  type operator = string
+  structure ANFFVM = FreshVarMonad (type v = ANFTerm.var; fun f i = ANFTerm.GenVar i)
+  open ANFFVM
+  
+  fun normalize m = normalizeterm m (fn x => return x)
 
-  datatype ty =
-    IntTy
-  | BoolTy
-  | UnitTy
-  | TupleTy of ty list
-  | FuncTy of regionset * ty list * ty * effect
-  (* | RegFuncTy of regionvar * ty * effect *)
-  | BoxedTy of ty * regionvar
+  and normalizeterm (Term.Value v) k =
+      normalizevalue v (fn v' =>
+      fresh >>= (fn v'' => 
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v''))) >>= (fn e =>
+        return (ANFTerm.Let (v'', ANFTerm.Atom (ANFTerm.Var v'), e))
+      )))
+  | normalizeterm (Term.Var v) k =
+      k (ANFTerm.AtomTerm (ANFTerm.Var (ANFTerm.NamedVar v)))
+  | normalizeterm (Term.Select (i, m)) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' =>
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Select (i, ANFTerm.Var v), e))
+      )))
+  | normalizeterm (Term.Box (m, r)) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' =>
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Box (ANFTerm.Var v, r), e))
+      )))
+  | normalizeterm (Term.Unbox m) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' =>
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Unbox (ANFTerm.Var v), e))
+      )))
+  | normalizeterm (Term.Let (x, m1, m2, argt)) k =
+      normalizename m1 (fn v =>
+      fresh >>= (fn v' => 
+      normalizeterm m2 k >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Atom (ANFTerm.Var v), e))
+      )))
+  | normalizeterm (Term.LetRegion (r, m)) k =
+      normalizeterm m k >>= (fn m' =>
+        return (ANFTerm.LetRegion (r, m'))
+      )
+  | normalizeterm (Term.IfElse (m1, m2, m3)) k =
+      normalizename m1 (fn v =>
+      normalizeterm m2 k >>= (fn e1 =>
+      normalizeterm m3 k >>= (fn e2 =>
+        return (ANFTerm.IfElse (ANFTerm.Var v, e1, e2))
+      )))
+  | normalizeterm (Term.RegionElim (rs, m)) k =
+      normalizename m (fn (v : ANFTerm.var) =>
+      fresh >>= (fn (v' : ANFTerm.var) =>
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.RegionElim (rs, ANFTerm.Var v), e))
+      )))
+  | normalizeterm (Term.App (m1, m2)) k =
+      normalizename m1 (fn v =>
+      normalizenames m2 (fn argv =>
+      fresh >>= (fn v' => 
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.App (ANFTerm.Var v,
+          map (fn v' => ANFTerm.Var v') argv), e))
+      ))))
+  | normalizeterm (Term.PrimApp (opr, m)) k =
+      normalizenames m (fn argv =>
+      fresh >>= (fn v' => 
+      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.PrimApp (opr,
+          map (fn v' => ANFTerm.Var v') argv), e))
+      )))
 
-  and value =
-    IntLit of int
-  | BoolLit of bool
-  | UnitLit
-  | Lambda of regionset * (var * ty) list * ty * effect * term
-  | Tuple of term list
-  | BarePointer of regionvar * pointername
+  and normalizename (Term.Value v) k = normalizevalue v k
+  | normalizename (Term.Var v) k = k (ANFTerm.NamedVar v)
+  | normalizename (Term.Select (i, m)) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Select (i, ANFTerm.Var v), e))
+      )))
+  | normalizename (Term.Box (m, r)) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Box (ANFTerm.Var v, r), e))
+      )))
+  | normalizename (Term.Unbox m) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Unbox (ANFTerm.Var v), e))
+      )))
+  | normalizename (Term.Let (x, m1, m2, argt)) k =
+      normalizename m1 (fn v =>
+      fresh >>= (fn v' => 
+      normalizename m2 k >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Atom (ANFTerm.Var v), e))
+      )))
+  | normalizename (Term.LetRegion (r, m)) k =
+      normalizename m k >>= (fn m' =>
+        return (ANFTerm.LetRegion (r, m'))
+      )
+  | normalizename (Term.IfElse (m1, m2, m3)) k =
+      normalizename m1 (fn v =>
+      normalizename m2 k >>= (fn e1 =>
+      normalizename m3 k >>= (fn e2 =>
+        return (ANFTerm.IfElse (ANFTerm.Var v, e1, e2))
+      )))
+  | normalizename (Term.RegionElim (rs, m)) k =
+      normalizename m (fn v =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.RegionElim (rs, ANFTerm.Var v), e))
+      )))
+  | normalizename (Term.App (m1, m2)) k =
+      normalizename m1 (fn v =>
+      normalizenames m2 (fn argv =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.App (ANFTerm.Var v,
+          map (fn v' => ANFTerm.Var v') argv), e))
+      ))))
+  | normalizename (Term.PrimApp (opr, m)) k =
+      normalizenames m (fn argv =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.PrimApp (opr,
+          map (fn v' => ANFTerm.Var v') argv), e))
+      )))
 
-  and term = 
-    Value of value
-  | Var of var
-  | Select of int * term
-  | Box of term * regionvar
-  | Unbox of term
-  | Let of var * term * term * ty
-  | LetRegion of regionvar * term
-  | RegionElim of regionset * term
-  | IfElse of term * term * term
-  | App of term * term list
-  | PrimApp of operator * term * term
+  and normalizenames (tl) k = normnames [] tl k
 
-  and declaration = 
-    DeclType of var * ty
-  | DeclVal of var * ty * term
-  | DeclFun of var * var list * ty list * ty * term
+  and normnames vl ([]) k = k vl
+  | normnames vl (m::ml) k =
+    normalizename m (fn v =>
+      normnames (v::vl) ml k
+    )
 
-  and program = 
-    Prog of declaration list
-
-  fun eqty (IntTy, IntTy) = true
-  | eqty (BoolTy, BoolTy) = true
-  | eqty (UnitTy, UnitTy) = true
-  | eqty (TupleTy t1, TupleTy t2) =
-      List.all (fn x => x = true) (map eqty (ListPair.zipEq (t1, t2)))
-  | eqty (FuncTy (rs1, tl1, rt1, phi1), FuncTy (rs2, tl2, rt2, phi2)) =
-      List.all (fn x => x = true) (map eqty (ListPair.zipEq (tl1, tl2)))
-      andalso eqty (rt1, rt2) andalso Set.eq rs1 rs2 andalso Set.eq phi1 phi2
-  | eqty (BoxedTy (t1, r1), BoxedTy (t2, r2)) = eqty (t1, t2) andalso r1 = r2
-  | eqty (_, _) = false
-
-  fun substRegVarTy (dst, newr) (IntTy) = IntTy
-  | substRegVarTy (dst, newr) (BoolTy) = BoolTy
-  | substRegVarTy (dst, newr) (UnitTy) = UnitTy
-  | substRegVarTy (dst, newr) (TupleTy t) = 
-      TupleTy (map (substRegVarTy (dst, newr)) t)
-  | substRegVarTy (dst, newr) (FuncTy (rvl, t1, t2, phi)) =
-      FuncTy (rvl, map (substRegVarTy (dst, newr)) t1, 
-        substRegVarTy (dst, newr) t2,
-        Set.map (fn r => if dst = r then newr else r) phi)
-  | substRegVarTy (dst, newr) (BoxedTy (t, r)) = 
-      BoxedTy (substRegVarTy (dst, newr) t, if dst = r then newr else r)
-
-  fun substRegVar (dst, newr) (Value v) = Value (substRegVarValue (dst, newr) v)
-  | substRegVar (dst, newr) (Var v) = Var v
-  | substRegVar (dst, newr) (Select (i, m)) =
-      Select (i, substRegVar (dst, newr) m)
-  | substRegVar (dst, newr) (Box (m, r)) = 
-      Box (substRegVar (dst, newr) m, if dst = r then newr else r)
-  | substRegVar (dst, newr) (Unbox m) = 
-      Unbox (substRegVar (dst, newr) m)
-  | substRegVar (dst, newr) (Let (x, m1, m2, argt)) = 
-      Let (x, substRegVar (dst, newr) m1, substRegVar (dst, newr) m2, argt)
-  | substRegVar (dst, newr) (LetRegion (r, m)) = 
-      LetRegion (r, substRegVar (dst, newr) m)
-  | substRegVar (dst, newr) (IfElse (m1, m2, m3)) = 
-      IfElse (substRegVar (dst, newr) m1, substRegVar (dst, newr) m2, substRegVar (dst, newr) m3)
-  | substRegVar (dst, newr) (RegionElim (rs, m)) = 
-      RegionElim (Set.map (fn r => if dst = r then newr else r) rs, substRegVar (dst, newr) m)
-  | substRegVar (dst, newr) (App (m1, m2)) = 
-      App (substRegVar (dst, newr) m1, map (substRegVar (dst, newr)) m2)
-  | substRegVar (dst, newr) (PrimApp (opr, m1, m2)) = 
-      PrimApp (opr, substRegVar (dst, newr) m1, substRegVar (dst, newr) m2)
-
-  and substRegVarValue (dst, newr) (IntLit i) = IntLit i
-  | substRegVarValue (dst, newr) (BoolLit b) = BoolLit b
-  | substRegVarValue (dst, newr) (UnitLit) = UnitLit
-  | substRegVarValue (dst, newr) (Lambda (rs, args, rt, phi, m)) = 
-      Lambda (rs, map (fn (x, t) => (x, substRegVarTy (dst, newr) t)) args,
-        substRegVarTy (dst, newr) rt,
-        Set.map (fn r => if dst = r then newr else r) phi,
-        substRegVar (dst, newr) m)
-  | substRegVarValue (dst, newr) (Tuple m) = 
-      Tuple (map (substRegVar (dst, newr)) m)
-  | substRegVarValue (dst, newr) (BarePointer (r, p)) = (BarePointer (r, p))
-
-  and substRegVarRegSet (dst, newr) rs =
-    Set.map (fn x => if x = dst then newr else x) rs
-
-  fun tostringrs rs =
-    String.concat ["{", (String.concatWith ", " (Set.toList rs)), "}"]
-  (*datatype ty =
-    IntTy
-  | BoolTy
-  | UnitTy
-  | TupleTy of ty list
-  | FuncTy of regionset * ty list * ty * effect
-  | BoxedTy of ty * regionvar*)
-
-  fun tostringty (IntTy) = "int"
-  | tostringty (BoolTy) = "bool"
-  | tostringty (UnitTy) = "unit"
-  | tostringty (TupleTy tl) =
-      String.concat ["(", String.concatWith ", " (map tostringty tl), ")"]
-  | tostringty (FuncTy (rs, argt, rt, phi)) =
-      String.concat ["forall ", tostringrs rs,
-        "(", String.concatWith ", " (map tostringty argt), ") -> ",
-        tostringrs phi, " ", tostringty rt]
-  | tostringty (BoxedTy (t, r)) = String.concat [tostringty t, " at ", r]
-
-  (*and value =
-    IntLit of int
-  | BoolLit of bool
-  | UnitLit
-  | Lambda of regionset * (var * ty) list * ty * effect * term
-  | Tuple of term list
-  | BarePointer of regionvar * pointername
-
-  and term = 
-    Value of value
-  | Var of var
-  | Select of int * term
-  | Box of term * regionvar
-  | Unbox of term
-  | Let of var * term * term * ty
-  | LetRegion of regionvar * term
-  | RegionElim of regionset * term
-  | IfElse of term * term * term
-  | App of term * term list
-  | PrimApp of operator * term * term
-
-  and declaration = 
-    DeclType of var * ty
-  | DeclVal of var * ty * term
-  | DeclFun of var * var list * ty list * ty * term*)
-
-
+  and normalizevalue (Term.IntLit i) k =
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v',
+          ANFTerm.Atom (ANFTerm.Value (ANFTerm.IntLit i)), e))
+      ))
+  | normalizevalue (Term.BoolLit b) k =
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v',
+          ANFTerm.Atom (ANFTerm.Value (ANFTerm.BoolLit b)), e))
+      ))
+  | normalizevalue (Term.UnitLit) k =
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v',
+          ANFTerm.Atom (ANFTerm.Value (ANFTerm.UnitLit)), e))
+      ))
+  | normalizevalue (Term.Lambda (rs, args, rt, phi, m)) k =
+      fresh >>= (fn v' => 
+      normalize m >>= (fn m' =>
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Atom (ANFTerm.Value (
+          ANFTerm.Lambda (rs, map (fn x => ANFTerm.NamedVar x)
+            (#1 (ListPair.unzip args)), m'))), e))
+      )))
+  | normalizevalue (Term.Tuple m) k = 
+      normalizenames m (fn argv =>
+      fresh >>= (fn v' => 
+      (k v') >>= (fn e =>
+        return (ANFTerm.Let (v',
+          ANFTerm.Atom (ANFTerm.Value (
+            ANFTerm.Tuple (map (fn v' => ANFTerm.Var v') argv))), e))
+      )))
 
 end
 

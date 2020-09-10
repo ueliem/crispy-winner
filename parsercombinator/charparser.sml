@@ -48,8 +48,6 @@ struct
 
 end
 
-(* structure CParser = ParserT(structure S = CharStream) *)
-
 functor CharParser (structure S : sig
   include STRM
   where type elem = char

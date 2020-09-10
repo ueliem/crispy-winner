@@ -1,44 +1,31 @@
+use "common/common.sml";
 use "common/monad.sml";
 use "common/set.sml";
 use "common/assoclist.sml";
+use "common/freshvarmonad.sml";
 use "parsercombinator/newpc.sml";
 use "parsercombinator/charparser.sml";
-(* use "src/core/lang.sml";
-use "src/core/check.sml";
-use "src/core/interp.sml";*)
-use "src/syntax/lang.sml";
+use "src/syntax/lang/regionset.sml";
+use "src/syntax/lang/ty.sml";
+use "src/syntax/lang/term.sml";
+use "src/syntax/lang/program.sml";
+use "src/anf/lang/anfterm.sml";
+use "src/anf/lang/anfprogram.sml";
+use "src/anf/anf.sml";
+use "src/closlang/lang/closlangterm.sml";
+use "src/closlang/lang/closlangprogram.sml";
+use "src/closlang/closlang.sml";
+use "src/firstorder/lang/firstorderterm.sml";
+use "src/firstorder/lang/firstorderprogram.sml";
+use "src/x86/x86machine.sml";
+use "src/x86/x86asm.sml";
 use "src/syntax/tokenizer.sml";
 use "src/syntax/parser.sml";
 use "src/syntax/check.sml";
-use "src/anf/anf.sml";
-(* use "src/ssa/ssa.sml"; *)
-
-open Syntax
-(* open Interp *)
 
 fun main () =
 let
   val _ = PolyML.print_depth 100000
-  (* val _ = PolyML.print prog
-  val initstate = (prog, EmptyEnv, [], Empty)
-  val _ = PolyML.print initstate
-  val _ = PolyML.print (TypeCheck.runCheck prog)
-  val _ = PolyML.print (runToCompletion initstate)
-
-  val contents : CharVector.vector = seq
-  val _ = PolyML.print contents
-  val t = Tokenizer.tokenize { pos = 0, s = contents }
-  val _ = PolyML.print t
-  val syn = SyntaxParser.term () t
-  val _ = PolyML.print syn
-
-  val contents : CharVector.vector = seq
-  val _ = PolyML.print contents
-  val t = Tokenizer.tokenize { pos = 0, s = contents }
-  val _ = PolyML.print t
-  val syn = SyntaxParser.term () t
-  val _ = PolyML.print syn *)
-
   (* val filename = List.nth (CommandLine.arguments (), 0) *)
   val filename = "examples/id.sml"
   val contents : CharVector.vector = TextIO.input (TextIO.openIn filename)

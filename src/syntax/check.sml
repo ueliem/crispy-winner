@@ -20,31 +20,33 @@ struct
 end
 
 structure TypeCheck : sig
-  type typeenv = (Syntax.var * Syntax.ty) list
-  type regionenv = Syntax.regionset
+  type typeenv = (Term.var * Ty.ty) list
+  type regionenv = RegionSet.regionset
 
-  val checkValue : typeenv -> regionenv -> Syntax.value -> (Syntax.ty * Syntax.effect) TypeCheckMonad.monad
-  val checkTerm : typeenv -> regionenv -> Syntax.term -> (Syntax.ty * Syntax.effect) TypeCheckMonad.monad
-  val checkProgram : Syntax.program -> (Syntax.ty * Syntax.effect) TypeCheckMonad.monad
+  val checkValue : typeenv -> regionenv -> Term.value -> (Ty.ty * RegionSet.effect) TypeCheckMonad.monad
+  val checkTerm : typeenv -> regionenv -> Term.term -> (Ty.ty * RegionSet.effect) TypeCheckMonad.monad
+  val checkProgram : Program.program -> (Ty.ty * RegionSet.effect) TypeCheckMonad.monad
 end
 =
 struct
-  type typeenv = (Syntax.var * Syntax.ty) list
-  type regionenv = Syntax.regionset
+  type typeenv = (Term.var * Ty.ty) list
+  type regionenv = RegionSet.regionset
   open TypeCheckMonad
-  open Syntax
+  open Ty
+  open Term
+  open Program
 
   fun checkProgram (Prog dl) =
     let
       fun checkDecl tenv renv ([]) = raise Fail "done"
       | checkDecl tenv renv (d::dl) =
           (case d of
-            Syntax.DeclType (v, t) => raise Fail "declty"
-          | Syntax.DeclVal (v, t, m) =>
+            Program.DeclType (v, t) => raise Fail "declty"
+          | Program.DeclVal (v, t, m) =>
               checkTerm tenv renv m >>= (fn (t', phi') =>
                 let
-                  val _ = PolyML.print (tostringty t)
-                  val _ = PolyML.print (tostringty t')
+                  val _ = PolyML.print (Ty.tostring t)
+                  val _ = PolyML.print (Ty.tostring t')
                 in
                   if eqty (t, t') then
                     checkDecl ((v, t)::tenv) renv (dl) >>= (fn _ =>
@@ -53,7 +55,7 @@ struct
                   else raise Fail "declval1"
                 end
               )
-          | Syntax.DeclFun (v, vl, tl, t, m) => raise Fail "declfun")
+          | Program.DeclFun (v, vl, tl, t, m) => raise Fail "declfun")
     in
       checkDecl [] Set.emptyset dl
     end
@@ -95,8 +97,8 @@ struct
               if Set.member r renv then
                 return (BoxedTy (FuncTy (Set.emptyset, 
                   map (fn ft => foldl (fn (sbt, argt) => substRegVarTy sbt argt) ft substs) tl,
-                  foldl (fn (sbt, argt) => substRegVarTy sbt argt) rt substs,
-                  foldl (fn (sbt, s) => substRegVarRegSet sbt s) phi1 substs),
+                  foldl (fn (sbt, argt) => Ty.substRegVarTy sbt argt) rt substs,
+                  foldl (fn (sbt, s) => RegionSet.substRegVarRegSet sbt s) phi1 substs),
                   r), Set.singleton r)
               else raise Fail "elim2"
             end
@@ -132,7 +134,7 @@ struct
           | _ => raise Fail "app1")
         ))
       end
-  | checkTerm tyenv regenv (PrimApp (opr, m1, m2)) = 
+  (* | checkTerm tyenv regenv (PrimApp (opr, m1, m2)) = 
       checkTerm tyenv regenv m1 >>= (fn (t1, phi1) =>
       checkTerm tyenv regenv m2 >>= (fn (t2, phi2) =>
         (case (t1, t2) of
@@ -146,7 +148,7 @@ struct
             | _ => raise Fail "undefined operator"
             )
         | _ => raise Fail "primapp1")
-      ))
+      )) *)
 
   and checkValue tenv renv (IntLit _) = return (IntTy, Set.emptyset)
   | checkValue tenv renv (BoolLit _) = return (BoolTy, Set.emptyset)
@@ -174,7 +176,6 @@ struct
           return (TupleTy tl, phi)
         )
       end
-  | checkValue tenv renv (BarePointer _) = raise Fail "probably should not be possible"
 
 end
 

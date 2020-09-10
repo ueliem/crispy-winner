@@ -1,4 +1,18 @@
-structure X86 : sig
+structure X86Machine : sig
+  datatype operandsize =
+    One
+  | Two
+  | Four
+  | Eight
+  type register = string
+  type immed = string
+  type addr = {
+    segment : register option,
+    offset : immed,
+    base : register option,
+    index : register option,
+    scale : operandsize
+  }
   type prefix =
   {
     instrprefix : Word8.word option,
@@ -31,6 +45,20 @@ structure X86 : sig
 end
 =
 struct
+  datatype operandsize =
+    One
+  | Two
+  | Four
+  | Eight
+  type register = string
+  type immed = string
+  type addr = {
+    segment : register option,
+    offset : immed,
+    base : register option,
+    index : register option,
+    scale : operandsize
+  }
   type prefix =
   {
     instrprefix : Word8.word option,

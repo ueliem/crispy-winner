@@ -9,7 +9,60 @@ This is a functional systems language
 - Built-in integer and boolean types
 - Tuples
 
-## Compiler Passes
+## Compiler Phases
+
+### Source Syntax
+
+- Full language with higher order functions
+- No partial function application
+- Lexically scoped named variables and regions
+
+#### Passes
+
+- Presumably desugaring, but there isn't any sugar yet
+- Encoding to ANF
+
+### A-Normal Form
+
+#### Passes
+
+- Encoding to ClosLang by closure conversion
+
+### ClosLang
+
+#### Passes
+
+- Lambda lifting
+- Encoding to first order language
+
+### First Order Language
+
+- 
+
+#### Passes
+
+- Local variables are rewritten as de bruijn indices into the environment
+- Region variables should be rewritten but I am not sure what to do yet
+- Global variables rewritten to global table lookups
+- Simplification of expressions by adding let expressions, shifting the indices as needed
+- Only machine values from this point on
+- Encoding to SSA form
+
+### SSA Form
+
+#### Passes
+
+- Rename variables as in SSA form
+- Encode as SSA form, adding phi statements as needed, and converting to machine types
+
+- Register allocation accounting for architecture constraints
+
+### Assembly Language
+
+
+### Machine Code
+
+
 
 - Parsing to abstract syntax tree
 - Transform to core language
@@ -44,16 +97,15 @@ This is a functional systems language
 | "unit"
 | <tuplety>
 | <funty>
-| <regfunty>
 | <boxty>
 
 <tuplety> ::= <ty> [ "*" <ty> ]+
-<funty> ::= "(" <ty> [ "," <ty> ]+ ")" "->" <effect> <ty>
-<regfunty> ::= "forall" <regionset> <ty>
+<funty> ::= "forall" <regionset> "(" <ty> [ "," <ty> ]+ ")" "->" <effect> <ty>
 <boxty> ::= <ty> "at" <regionvar>
 ```
 
 ### Top Level Syntax
+
 ```
 <program> ::= [ <declaration> ]+
 
