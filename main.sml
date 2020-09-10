@@ -39,6 +39,7 @@ let
       let
         val _ = (PolyML.print (s); PolyML.print ("OK"))
         val _ = PolyML.print (TypeCheck.checkProgram s)
+        val _ = (PolyML.print (ANF.normalizeprogram s 0))
       in
         ()
       end

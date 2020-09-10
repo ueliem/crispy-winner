@@ -5,6 +5,8 @@ sig
     include MONAD
     val fresh : ANFTerm.var monad
   end
+  val normalizeprogram : Program.program -> ANFProgram.program ANFFVM.monad
+  val normalizedecl : Program.declaration -> ANFProgram.declaration ANFFVM.monad
   val normalize : Term.term -> ANFTerm.term ANFFVM.monad
   val normalizeterm : Term.term -> (ANFTerm.term -> ANFTerm.term ANFFVM.monad) -> ANFTerm.term ANFFVM.monad
   val normalizename : Term.term -> (ANFTerm.var -> ANFTerm.term ANFFVM.monad) -> ANFTerm.term ANFFVM.monad
@@ -16,7 +18,29 @@ struct
   structure ANFFVM = FreshVarMonad (type v = ANFTerm.var; fun f i = ANFTerm.GenVar i)
   open ANFFVM
   
-  fun normalize m = normalizeterm m (fn x => return x)
+  fun normalizeprogram (Program.Prog (dl)) =
+    let
+      fun f ([]) = return ([])
+      | f (d::ds) =
+          normalizedecl d >>= (fn d' =>
+          (f ds) >>= (fn ds' =>
+            return (d'::ds')
+          ))
+    in
+      f dl >>= (fn dl' =>
+        return (ANFProgram.Prog dl')
+      )
+    end
+
+  and normalizedecl (Program.DeclType (v, t)) =
+      return (ANFProgram.DeclType (ANFTerm.NamedVar (v), t))
+  | normalizedecl (Program.DeclVal (v, t, m)) =
+      normalize m >>= (fn m' =>
+        return (ANFProgram.DeclVal (ANFTerm.NamedVar (v), t, m'))
+      )
+  | normalizedecl (Program.DeclFun (v, argv, argt, rt, m)) = raise Fail ""
+
+  and normalize m = normalizeterm m (fn x => return x)
 
   and normalizeterm (Term.Value v) k =
       normalizevalue v (fn v' =>
@@ -142,7 +166,7 @@ struct
 
   and normalizenames (tl) k = normnames [] tl k
 
-  and normnames vl ([]) k = k vl
+  and normnames vl ([]) k = k (List.rev vl)
   | normnames vl (m::ml) k =
     normalizename m (fn v =>
       normnames (v::vl) ml k

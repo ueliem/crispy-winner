@@ -9,7 +9,10 @@ struct
   open State
 
   val fresh =
-    State.get >>= (fn i => return (f i))
+    State.get >>= (fn i =>
+    State.put (i + 1) >>= (fn _ =>
+      return (f i)
+    ))
 
 end
 

@@ -25,7 +25,7 @@ structure TypeCheck : sig
 
   val checkValue : typeenv -> regionenv -> Term.value -> (Ty.ty * RegionSet.effect) TypeCheckMonad.monad
   val checkTerm : typeenv -> regionenv -> Term.term -> (Ty.ty * RegionSet.effect) TypeCheckMonad.monad
-  val checkProgram : Program.program -> (Ty.ty * RegionSet.effect) TypeCheckMonad.monad
+  val checkProgram : Program.program -> ((Ty.ty * RegionSet.effect) list) TypeCheckMonad.monad
 end
 =
 struct
@@ -38,7 +38,7 @@ struct
 
   fun checkProgram (Prog dl) =
     let
-      fun checkDecl tenv renv ([]) = raise Fail "done"
+      fun checkDecl tenv renv ([]) = return []
       | checkDecl tenv renv (d::dl) =
           (case d of
             Program.DeclType (v, t) => raise Fail "declty"
@@ -49,8 +49,8 @@ struct
                   val _ = PolyML.print (Ty.tostring t')
                 in
                   if eqty (t, t') then
-                    checkDecl ((v, t)::tenv) renv (dl) >>= (fn _ =>
-                      raise Fail "declval2"
+                    checkDecl ((v, t)::tenv) renv (dl) >>= (fn tp' =>
+                      return ((t', phi')::tp')
                     )
                   else raise Fail "declval1"
                 end
@@ -115,6 +115,32 @@ struct
         | _ => raise Fail "ifelse1")
       )))
   | checkTerm tyenv regenv (App (m1, m2)) = 
+      checkTerm tyenv regenv m1 >>= (fn (t1, phi1) =>
+      checkTermList tyenv regenv m2 >>= (fn (t2, phi2) =>
+        (case t1 of
+          BoxedTy (FuncTy (rsf, tl, rt, phi3), r) => 
+            if Set.isempty rsf andalso 
+              List.all (fn x => x = true) (map eqty (ListPair.zipEq (tl, t2)))
+            then return (rt, Set.insert r (Set.union phi1 (Set.union phi2 phi3)))
+            else raise Fail "app2"
+        | _ => raise Fail "app1")
+      ))
+  | checkTerm tyenv regenv (PrimApp (opr, m)) = 
+      checkTermList tyenv regenv m >>= (fn (t, phi) =>
+        if List.length t = 2 then
+          (case (List.nth (t, 0), List.nth (t, 1)) of
+            (IntTy, IntTy) => 
+              (case opr of
+                "+" => return (IntTy, phi)
+              | "-" => return (IntTy, phi)
+              | "*" => return (IntTy, phi)
+              | "<" => return (BoolTy, phi)
+              | "=" => return (BoolTy, phi)
+              | _ => raise Fail "undefined operator"
+              ))
+        else raise Fail "do not have anything other than binops yet"
+      )
+  and checkTermList tyenv regenv m =
       let
         fun f ([]) = return ([], Set.emptyset)
         | f (x::xs) = 
@@ -123,32 +149,8 @@ struct
               return (t::tl, Set.union phi phi1)
             ))
       in
-        checkTerm tyenv regenv m1 >>= (fn (t1, phi1) =>
-        f m2 >>= (fn (t2, phi2) =>
-          (case t1 of
-            BoxedTy (FuncTy (rsf, tl, rt, phi3), r) => 
-              if Set.isempty rsf andalso 
-                List.all (fn x => x = true) (map eqty (ListPair.zipEq (tl, t2)))
-              then return (rt, Set.insert r (Set.union phi1 (Set.union phi2 phi3)))
-              else raise Fail "app2"
-          | _ => raise Fail "app1")
-        ))
+        f m
       end
-  (* | checkTerm tyenv regenv (PrimApp (opr, m1, m2)) = 
-      checkTerm tyenv regenv m1 >>= (fn (t1, phi1) =>
-      checkTerm tyenv regenv m2 >>= (fn (t2, phi2) =>
-        (case (t1, t2) of
-          (IntTy, IntTy) => 
-            (case opr of
-              "+" => return (IntTy, Set.union phi1 phi2)
-            | "-" => return (IntTy, Set.union phi1 phi2)
-            | "*" => return (IntTy, Set.union phi1 phi2)
-            | "<" => return (BoolTy, Set.union phi1 phi2)
-            | "=" => return (BoolTy, Set.union phi1 phi2)
-            | _ => raise Fail "undefined operator"
-            )
-        | _ => raise Fail "primapp1")
-      )) *)
 
   and checkValue tenv renv (IntLit _) = return (IntTy, Set.emptyset)
   | checkValue tenv renv (BoolLit _) = return (BoolTy, Set.emptyset)
