@@ -1,4 +1,4 @@
-structure ANFProgram : sig
+structure ClosLangProgram : sig
   type var = ANFTerm.var
   type regionvar = string
   type regionset = RegionSet.regionset
@@ -7,10 +7,10 @@ structure ANFProgram : sig
 
   datatype declaration = 
     DeclType of var * Ty.ty
-  | DeclVal of var * Ty.ty * ANFTerm.term
-  | DeclFun of var * var list * Ty.ty list * Ty.ty * ANFTerm.term
+  | DeclVal of var * Ty.ty * ClosLangTerm.term
+  | DeclFun of var * var list * Ty.ty list * Ty.ty * ClosLangTerm.term
 
-  datatype program = 
+  datatype program =
     Prog of declaration list
 
 end
@@ -24,8 +24,8 @@ struct
 
   datatype declaration = 
     DeclType of var * Ty.ty
-  | DeclVal of var * Ty.ty * ANFTerm.term
-  | DeclFun of var * var list * Ty.ty list * Ty.ty * ANFTerm.term
+  | DeclVal of var * Ty.ty * ClosLangTerm.term
+  | DeclFun of var * var list * Ty.ty list * Ty.ty * ClosLangTerm.term
 
   datatype program = 
     Prog of declaration list

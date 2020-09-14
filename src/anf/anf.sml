@@ -45,34 +45,34 @@ struct
   and normalizeterm (Term.Value v) k =
       normalizevalue v (fn v' =>
       fresh >>= (fn v'' => 
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v''))) >>= (fn e =>
-        return (ANFTerm.Let (v'', ANFTerm.Atom (ANFTerm.Var v'), e))
+      (k (ANFTerm.Return (v''))) >>= (fn e =>
+        return (ANFTerm.Let (v'', ANFTerm.Var v', e))
       )))
   | normalizeterm (Term.Var v) k =
-      k (ANFTerm.AtomTerm (ANFTerm.Var (ANFTerm.NamedVar v)))
+      k (ANFTerm.Return (ANFTerm.NamedVar v))
   | normalizeterm (Term.Select (i, m)) k =
       normalizename m (fn v =>
       fresh >>= (fn v' =>
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Select (i, ANFTerm.Var v), e))
+      (k (ANFTerm.Return v')) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Select (i, v), e))
       )))
   | normalizeterm (Term.Box (m, r)) k =
       normalizename m (fn v =>
       fresh >>= (fn v' =>
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Box (ANFTerm.Var v, r), e))
+      (k (ANFTerm.Return (v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Box (v, r), e))
       )))
   | normalizeterm (Term.Unbox m) k =
       normalizename m (fn v =>
       fresh >>= (fn v' =>
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Unbox (ANFTerm.Var v), e))
+      (k (ANFTerm.Return (v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.Unbox (v), e))
       )))
   | normalizeterm (Term.Let (x, m1, m2, argt)) k =
       normalizename m1 (fn v =>
       fresh >>= (fn v' => 
       normalizeterm m2 k >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Atom (ANFTerm.Var v), e))
+        return (ANFTerm.Let (v', ANFTerm.Var (v), e))
       )))
   | normalizeterm (Term.LetRegion (r, m)) k =
       normalizeterm m k >>= (fn m' =>
@@ -82,28 +82,26 @@ struct
       normalizename m1 (fn v =>
       normalizeterm m2 k >>= (fn e1 =>
       normalizeterm m3 k >>= (fn e2 =>
-        return (ANFTerm.IfElse (ANFTerm.Var v, e1, e2))
+        return (ANFTerm.IfElse (v, e1, e2))
       )))
   | normalizeterm (Term.RegionElim (rs, m)) k =
       normalizename m (fn (v : ANFTerm.var) =>
       fresh >>= (fn (v' : ANFTerm.var) =>
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.RegionElim (rs, ANFTerm.Var v), e))
+      (k (ANFTerm.Return (v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.RegionElim (rs, v), e))
       )))
   | normalizeterm (Term.App (m1, m2)) k =
       normalizename m1 (fn v =>
       normalizenames m2 (fn argv =>
       fresh >>= (fn v' => 
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.App (ANFTerm.Var v,
-          map (fn v' => ANFTerm.Var v') argv), e))
+      (k (ANFTerm.Return (v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.App (v, argv), e))
       ))))
   | normalizeterm (Term.PrimApp (opr, m)) k =
       normalizenames m (fn argv =>
       fresh >>= (fn v' => 
-      (k (ANFTerm.AtomTerm (ANFTerm.Var v'))) >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.PrimApp (opr,
-          map (fn v' => ANFTerm.Var v') argv), e))
+      (k (ANFTerm.Return (v'))) >>= (fn e =>
+        return (ANFTerm.Let (v', ANFTerm.PrimApp (opr, argv), e))
       )))
 
   and normalizename (Term.Value v) k = normalizevalue v k
@@ -112,25 +110,25 @@ struct
       normalizename m (fn v =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Select (i, ANFTerm.Var v), e))
+        return (ANFTerm.Let (v', ANFTerm.Select (i, v), e))
       )))
   | normalizename (Term.Box (m, r)) k =
       normalizename m (fn v =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Box (ANFTerm.Var v, r), e))
+        return (ANFTerm.Let (v', ANFTerm.Box (v, r), e))
       )))
   | normalizename (Term.Unbox m) k =
       normalizename m (fn v =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Unbox (ANFTerm.Var v), e))
+        return (ANFTerm.Let (v', ANFTerm.Unbox (v), e))
       )))
   | normalizename (Term.Let (x, m1, m2, argt)) k =
       normalizename m1 (fn v =>
       fresh >>= (fn v' => 
       normalizename m2 k >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Atom (ANFTerm.Var v), e))
+        return (ANFTerm.Let (v', ANFTerm.Var (v), e))
       )))
   | normalizename (Term.LetRegion (r, m)) k =
       normalizename m k >>= (fn m' =>
@@ -140,28 +138,26 @@ struct
       normalizename m1 (fn v =>
       normalizename m2 k >>= (fn e1 =>
       normalizename m3 k >>= (fn e2 =>
-        return (ANFTerm.IfElse (ANFTerm.Var v, e1, e2))
+        return (ANFTerm.IfElse (v, e1, e2))
       )))
   | normalizename (Term.RegionElim (rs, m)) k =
       normalizename m (fn v =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.RegionElim (rs, ANFTerm.Var v), e))
+        return (ANFTerm.Let (v', ANFTerm.RegionElim (rs, v), e))
       )))
   | normalizename (Term.App (m1, m2)) k =
       normalizename m1 (fn v =>
       normalizenames m2 (fn argv =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.App (ANFTerm.Var v,
-          map (fn v' => ANFTerm.Var v') argv), e))
+        return (ANFTerm.Let (v', ANFTerm.App (v, argv), e))
       ))))
   | normalizename (Term.PrimApp (opr, m)) k =
       normalizenames m (fn argv =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.PrimApp (opr,
-          map (fn v' => ANFTerm.Var v') argv), e))
+        return (ANFTerm.Let (v', ANFTerm.PrimApp (opr, argv), e))
       )))
 
   and normalizenames (tl) k = normnames [] tl k
@@ -175,36 +171,32 @@ struct
   and normalizevalue (Term.IntLit i) k =
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v',
-          ANFTerm.Atom (ANFTerm.Value (ANFTerm.IntLit i)), e))
+        return (ANFTerm.Let (v', ANFTerm.Value (ANFTerm.IntLit i), e))
       ))
   | normalizevalue (Term.BoolLit b) k =
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v',
-          ANFTerm.Atom (ANFTerm.Value (ANFTerm.BoolLit b)), e))
+        return (ANFTerm.Let (v', ANFTerm.Value (ANFTerm.BoolLit b), e))
       ))
   | normalizevalue (Term.UnitLit) k =
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v',
-          ANFTerm.Atom (ANFTerm.Value (ANFTerm.UnitLit)), e))
+        return (ANFTerm.Let (v', ANFTerm.Value (ANFTerm.UnitLit), e))
       ))
   | normalizevalue (Term.Lambda (rs, args, rt, phi, m)) k =
       fresh >>= (fn v' => 
       normalize m >>= (fn m' =>
       (k v') >>= (fn e =>
-        return (ANFTerm.Let (v', ANFTerm.Atom (ANFTerm.Value (
+        return (ANFTerm.Let (v', ANFTerm.Value (
           ANFTerm.Lambda (rs, map (fn x => ANFTerm.NamedVar x)
-            (#1 (ListPair.unzip args)), m'))), e))
+            (#1 (ListPair.unzip args)), m')), e))
       )))
   | normalizevalue (Term.Tuple m) k = 
       normalizenames m (fn argv =>
       fresh >>= (fn v' => 
       (k v') >>= (fn e =>
         return (ANFTerm.Let (v',
-          ANFTerm.Atom (ANFTerm.Value (
-            ANFTerm.Tuple (map (fn v' => ANFTerm.Var v') argv))), e))
+          ANFTerm.Value (ANFTerm.Tuple argv), e))
       )))
 
 end
