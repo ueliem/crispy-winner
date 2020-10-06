@@ -4,10 +4,23 @@
 
 This is a functional systems language
 
-- Region based memory management
-- Values are unboxed by default
+- Monadic Type System
+	- Distinct kinds for pure value expressions and computations with effects
+	- Functional, injective specifications
 - Built-in integer and boolean types
-- Tuples
+- Pairs, First, and Second (WIP)
+- Sigma types (WIP)
+- Delta rules (WIP)
+- Syntactic sugar (WIP)
+- Core language with de Bruijn indices
+
+- Type classes
+- Priviledged Monad type constructor that allows for computations with effects of the star-C sort, which can be overloaded via typeclasses
+- priviledged do notation for evaluating monads
+
+### Long term goals
+
+- Type preserving compiler (WIP)
 
 ## Compiler Phases
 

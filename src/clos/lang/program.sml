@@ -1,5 +1,5 @@
-structure FirstOrderProgram : sig
-  type var = FirstOrderTerm.var
+structure Program : sig
+  type var = string
   type regionvar = string
   type regionset = RegionSet.regionset
   type effect = RegionSet.effect
@@ -8,7 +8,7 @@ structure FirstOrderProgram : sig
   datatype declaration = 
     DeclType of var * Ty.ty
   | DeclVal of var * Ty.ty * Term.term
-  | DeclFun of var * Ty.ty list * Ty.ty * Term.term
+  | DeclFun of var * var list * Ty.ty list * Ty.ty * Term.term
 
   datatype program = 
     Prog of declaration list
@@ -16,7 +16,7 @@ structure FirstOrderProgram : sig
 end
 =
 struct
-  type var = FirstOrderTerm.var
+  type var = string
   type regionvar = string
   type regionset = RegionSet.regionset
   type effect = RegionSet.effect
@@ -25,7 +25,7 @@ struct
   datatype declaration = 
     DeclType of var * Ty.ty
   | DeclVal of var * Ty.ty * Term.term
-  | DeclFun of var * Ty.ty list * Ty.ty * Term.term
+  | DeclFun of var * var list * Ty.ty list * Ty.ty * Term.term
 
   datatype program = 
     Prog of declaration list

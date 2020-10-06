@@ -4,6 +4,7 @@ sig
     IntTy
   | BoolTy
   | UnitTy
+  | RegHandleTy of RegionSet.regionvar
   | TupleTy of ty list
   | FuncTy of RegionSet.regionset * ty list * ty * RegionSet.effect
   | BoxedTy of ty * RegionSet.regionvar
@@ -17,6 +18,7 @@ struct
     IntTy
   | BoolTy
   | UnitTy
+  | RegHandleTy of RegionSet.regionvar
   | TupleTy of ty list
   | FuncTy of RegionSet.regionset * ty list * ty * RegionSet.effect
   | BoxedTy of ty * RegionSet.regionvar
@@ -25,6 +27,7 @@ struct
   fun eqty (IntTy, IntTy) = true
   | eqty (BoolTy, BoolTy) = true
   | eqty (UnitTy, UnitTy) = true
+  | eqty (RegHandleTy r1, RegHandleTy r2) = r1 = r2
   | eqty (TupleTy t1, TupleTy t2) =
       List.all (fn x => x = true) (map eqty (ListPair.zipEq (t1, t2)))
   | eqty (FuncTy (rs1, tl1, rt1, phi1), FuncTy (rs2, tl2, rt2, phi2)) =
@@ -36,6 +39,8 @@ struct
   fun substRegVarTy (dst, newr) (IntTy) = IntTy
   | substRegVarTy (dst, newr) (BoolTy) = BoolTy
   | substRegVarTy (dst, newr) (UnitTy) = UnitTy
+  | substRegVarTy (dst, newr) (RegHandleTy r) =
+      RegHandleTy (if dst = r then newr else r)
   | substRegVarTy (dst, newr) (TupleTy t) = 
       TupleTy (map (substRegVarTy (dst, newr)) t)
   | substRegVarTy (dst, newr) (FuncTy (rvl, t1, t2, phi)) =
@@ -48,6 +53,7 @@ struct
   fun tostring (IntTy) = "int"
   | tostring (BoolTy) = "bool"
   | tostring (UnitTy) = "unit"
+  | tostring (RegHandleTy r) = String.concat ["reg ", r]
   | tostring (TupleTy tl) =
       String.concat ["(", String.concatWith ", " (map tostring tl), ")"]
   | tostring (FuncTy (rs, argt, rt, phi)) =

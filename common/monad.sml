@@ -23,10 +23,10 @@ end
 
 signature MONADSTATE =
 sig
-  type state
-  include MONAD where type 'a monad = state -> 'a * state
-  val get : state monad
-  val put : state -> unit monad
+  type s
+  include MONAD (* where type 'a monad = s -> 'a * s *)
+  val get : s monad
+  val put : s -> unit monad
 end
 
 signature FUNCTOR =
@@ -44,13 +44,15 @@ end
 
 functor StateFunctor (type s) :
 sig
-  type 'a state = s -> 'a * s
+  (* type 'a state = s -> 'a * s
   include MONAD where type 'a monad = 'a state
   val get : s state
-  val put : s -> unit state
+  val put : s -> unit state *)
+  include MONADSTATE
 end
 =
 struct
+  type s = s
   type 'a state = s -> 'a * s
   type 'a monad = 'a state
   fun return x = (fn s => (x, s))
@@ -150,14 +152,16 @@ end
 
 functor StateT (type s; structure M : MONAD) : 
 sig
-  type 'a state = s -> ('a * s) M.monad
+  (* type 'a state = s -> ('a * s) M.monad
   include MONAD where type 'a monad = 'a state
   val lift : 'a M.monad -> s -> ('a * s) M.monad
   val get : s state
-  val put : s -> unit state
+  val put : s -> unit state *)
+  include MONADSTATE
 end
 =
 struct
+  type s = s
   type 'a state = s -> ('a * s) M.monad
   type 'a monad = 'a state
   type 'a f = 'a state
