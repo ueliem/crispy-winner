@@ -16,7 +16,9 @@ structure MTSCheck : sig
   val hasRule : MTS.sort -> MTS.sort -> MTS.sort monad
   val startsRule : MTS.sort -> unit monad
 
-  val isMonad : MTS.term -> MTS.term monad
+  (* val iiiisFresh : MTS.var -> unit monad *)
+  val bindTy : MTS.var -> MTS.term -> unit monad
+  val bindDel : MTS.var -> MTS.term -> MTS.term -> unit monad
 
   val isFresh : MTS.var -> env -> unit monad
   val inEnv : MTS.var -> env -> (env * enventry) monad
@@ -52,62 +54,67 @@ struct
     EnvTy of MTS.var * MTS.term
   | EnvDel of MTS.var * MTS.term * MTS.term
   type env = enventry list
-  type s = MTS.sorts * MTS.ax * MTS.rules
+  type s = env * MTS.sorts * MTS.ax * MTS.rules
   structure M = StateFunctor (type s = s)
   structure MM = OptionT (structure M = M)
   open MM
   open MTS
 
   fun registerSort srt =
-    lift M.get >>= (fn (srts, axs, rls) =>
-    lift (M.put (srt::srts, axs, rls)))
+    lift M.get >>= (fn (e, srts, axs, rls) =>
+    lift (M.put (e, srt::srts, axs, rls)))
 
   fun registerAxiom s1 s2 =
-    lift M.get >>= (fn (srts, axs, rls) =>
-    lift (M.put (srts, (s1, s2)::axs, rls)))
+    lift M.get >>= (fn (e, srts, axs, rls) =>
+    lift (M.put (e, srts, (s1, s2)::axs, rls)))
 
   fun registerRule s1 s2 s3 =
-    lift M.get >>= (fn (srts, axs, rls) =>
-    lift (M.put (srts, axs, (s1, s2, s3)::rls)))
+    lift M.get >>= (fn (e, srts, axs, rls) =>
+    lift (M.put (e, srts, axs, (s1, s2, s3)::rls)))
 
   fun isSort (Sort s) =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       if List.exists (fn x => x = s) srts
       then return s else zero ())
   | isSort _ = zero ()
 
   fun isBottomSort srt =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       if List.exists (fn (s1, s2) => s2 = srt) axs
       then zero () else return ())
 
   fun isTopSort srt =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       if List.exists (fn (s1, s2) => s1 = srt) axs
       then zero () else return ())
 
   fun hasAxiom s1 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1', s2) => s1 = s1') axs of
         SOME (s1, s2) => return s2
       | NONE => zero ()))
 
   fun hasRule s1 s2 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
       | NONE => zero ()))
 
   fun startsRule s1 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1', s2', s3) => s1 = s1') rls of
         SOME (s1, s2, s3) => return ()
       | NONE => zero ()))
 
-  fun isMonad _ = raise Fail ""
-  (* fun isMonad (M m) = return m
-  | isMonad _ = zero () *)
+  fun bindTy v m =
+    isFresh v e >>= (fn _ => return ((EnvTy (v, m))::e))
 
+  fun bindDel v m1 m2 =
+    isFresh v e >>= (fn _ =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
+    lift (M.put ((EnvDel (v, m1, m2))::e, srts, axs, rls)) >>= (fn _ =>
+    return ()
+    )))
   fun inEnv v e =
     let
       fun f (e0) ([]) = zero ()
@@ -136,25 +143,25 @@ struct
     isFresh v e >>= (fn _ => return ((EnvDel (v, m1, m2))::e))
 
   fun plus s1 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1', s2) => s1 = s1') axs of
         SOME (s1, s2) => return s2
       | NONE => zero ()))
 
   fun minus s2 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1, s2') => s2 = s2') axs of
         SOME (s1, s2) => return s1
       | NONE => zero ()))
 
   fun rho s1 s2 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
       | NONE => zero ()))
 
   fun mu s1 s2 =
-    lift M.get >>= (fn (srts, axs, rls) =>
+    lift M.get >>= (fn (e, srts, axs, rls) =>
       (case List.find (fn (s1', s3, s2') => s1 = s1' andalso s2 = s2') rls of
         SOME (_, s3, _) => return s3
       | NONE => zero ()))
@@ -170,12 +177,10 @@ struct
   | elmtclass e (Lit (BoolTyLit)) = return KindVal
   | elmtclass e (Sort s) =
       sortclass e (Sort s) >>= plus
-  | elmtclass e (Do (v, m1, m2, m3)) = raise Fail ""
   | elmtclass e (App (m1, m2)) =
       elmtclass e m1 >>= (fn s1 =>
       elmtclass e m2 >>= (fn s2 => mu s1 s2))
   | elmtclass e (Case (m1, pml, m2)) = raise Fail ""
-  | elmtclass e (Prim (opr, ml)) = raise Fail ""
   | elmtclass e (IfElse (m1, m2, m3)) =
       elmtclass e m2 >>= (fn s2 =>
       elmtclass e m3 >>= (fn s3 =>
@@ -201,10 +206,8 @@ struct
   | sortclass e (Lit (BoolLit _)) = zero ()
   | sortclass e (Lit (BoolTyLit)) = return TypeVal
   | sortclass e (Sort s) = plus s
-  | sortclass e (Do (v, m1, m2, m3)) = raise Fail ""
   | sortclass e (App (m1, m2)) = elmtclass e (App (m1, m2)) >>= minus
   | sortclass e (Case (m1, pml, m2)) = raise Fail ""
-  | sortclass e (Prim (opr, ml)) = raise Fail ""
   | sortclass e (IfElse (m1, m2, m3)) =
       sortclass e m2 >>= (fn s2 =>
       sortclass e m3 >>= (fn s3 =>
@@ -230,15 +233,11 @@ struct
       if v = x then return (Var v) else return (Var v)
   | subst x x' (Lit l) = return (Lit l)
   | subst x x' (Sort s) = return (Sort s)
-  | subst x x' (Do (v, m1, m2, m3)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-      (subst x x' m3 >>= (fn m3' =>
-        return (Do (v, m1', m2', m3'))))))))
   | subst x x' (App (m1, m2)) =
       (subst x x' m1 >>= (fn m1' =>
       (subst x x' m2 >>= (fn m2' =>
         return (App (m1', m2'))))))
+  | subst x x' (Case (m1, pml, m2)) = raise Fail ""
   | subst x x' (IfElse (m1, m2, m3)) =
       (subst x x' m1 >>= (fn m1' =>
       (subst x x' m2 >>= (fn m2' =>
@@ -257,20 +256,32 @@ struct
       (subst x x' m1 >>= (fn m1' =>
       (subst x x' m2 >>= (fn m2' =>
         return (DepProduct (v, m1', m2'))))))
+  | subst x x' (DepSum (v, m1, m2)) =
+      (subst x x' m1 >>= (fn m1' =>
+      (subst x x' m2 >>= (fn m2' =>
+        return (DepSum (v, m1', m2'))))))
+  | subst x x' (Tuple (m1, m2, m3)) =
+      (subst x x' m1 >>= (fn m1' =>
+      (subst x x' m2 >>= (fn m2' =>
+      (subst x x' m3 >>= (fn m3' =>
+        return (Tuple (m1', m2', m3'))))))))
+  | subst x x' (First m) =
+      (subst x x' m >>= (fn m' =>
+        return (First m')))
+  | subst x x' (Second m) =
+      (subst x x' m >>= (fn m' =>
+        return (Second m')))
 
   fun nfstep (Var _) = zero ()
   | nfstep (Lit _) = zero ()
   | nfstep (Sort _) = zero ()
-  | nfstep (Do (v, m1, m2, m3)) =
-      (nfstep m1 >>= (fn m1' => return (Do (v, m1', m2, m3))))
-      ++ (nfstep m2 >>= (fn m2' => return (Do (v, m1, m2', m3))))
-      ++ (nfstep m3 >>= (fn m3' => return (Do (v, m1, m2, m3'))))
   | nfstep (App (m1, m2)) =
       (nfstep m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (App (m1, m2'))))
       ++ (case m1 of
           Lambda (v, m3, m4) => subst v m2 m4
         )
+  | nfstep (Case (m1, pml, m2)) = raise Fail ""
   | nfstep (IfElse (m1, m2, m3)) =
       (nfstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
       ++ (nfstep m2 >>= (fn m2' => return (IfElse (m1, m2', m3))))
@@ -285,6 +296,10 @@ struct
   | nfstep (DepProduct (v, m1, m2)) =
       (nfstep m1 >>= (fn m1' => return (DepProduct (v, m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (DepProduct (v, m1, m2'))))
+  | nfstep (DepSum (v, m1, m2)) = raise Fail ""
+  | nfstep (Tuple (m1, m2, m3)) = raise Fail ""
+  | nfstep (First m) = raise Fail ""
+  | nfstep (Second m) = raise Fail ""
 
   fun nfreduce m =
     (nfstep m >>= (fn m' => nfreduce m')) ++ return m
@@ -292,15 +307,12 @@ struct
   fun whstep (Var _) = zero ()
   | whstep (Lit _) = zero ()
   | whstep (Sort _) = zero ()
-  | whstep (Do (v, m1, m2, m3)) =
-      (whstep m1 >>= (fn m1' => return (Do (v, m1', m2, m3))))
-      ++ (whstep m2 >>= (fn m2' => return (Do (v, m1, m2', m3))))
-      ++ (whstep m3 >>= (fn m3' => return (Do (v, m1, m2, m3'))))
   | whstep (App (m1, m2)) =
       (whstep m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (case m1 of
           Lambda (v, m3, m4) => subst v m2 m4
         )
+  | whstep (Case (m1, pml, m2)) = raise Fail ""
   | whstep (IfElse (m1, m2, m3)) =
       (whstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
       ++ (whstep m2 >>= (fn m2' => return (IfElse (m1, m2', m3))))
@@ -315,6 +327,10 @@ struct
   | whstep (DepProduct (v, m1, m2)) =
       (whstep m1 >>= (fn m1' => return (DepProduct (v, m1', m2))))
       ++ (whstep m2 >>= (fn m2' => return (DepProduct (v, m1, m2'))))
+  | whstep (DepSum (v, m1, m2)) = raise Fail ""
+  | whstep (Tuple (m1, m2, m3)) = raise Fail ""
+  | whstep (First m) = raise Fail ""
+  | whstep (Second m) = raise Fail ""
 
   fun whreduce m =
     (whstep m >>= (fn m' => whreduce m')) ++ return m
@@ -332,22 +348,33 @@ struct
     ))
   and sdcl e (Var v) =
       inEnv v e >>= (fn (e', m) =>
-      whsdcl e' m >>= (fn m' =>
-      isSort m' >>= (fn _ =>
-      return m)))
+      let
+        val m' = (case m of
+          EnvTy (v', m') => m'
+        | EnvDel (v', m1, m2) => m1)
+      in
+        whsdcl e' m' >>= (fn m'' =>
+        isSort m'' >>= (fn _ =>
+        return m'))
+      end)
   | sdcl e (Lit (IntLit _)) = return (Lit (IntTyLit))
   | sdcl e (Lit (BoolLit _)) = return (Lit (BoolTyLit))
   | sdcl e (Lit (IntTyLit)) = return (Sort TypeVal)
   | sdcl e (Lit (BoolTyLit)) = return (Sort TypeVal)
   | sdcl e (Sort s) = hasAxiom s >>= (fn s' => return (Sort s'))
-  | sdcl e (Do (v, m1, m2, m3)) =
+  | sdcl e (App (m1, m2)) =
+      whsdcl e m1 >>= (fn m1' =>
+      sdcl e m2 >>= (fn m2' =>
+        (case m1' of
+          DepProduct (v, m1'', m2'') => subst v m2 m2'')))
+  | sdcl e (Case (m1, pml, m2)) = raise Fail ""
+  | sdcl e (IfElse (m1, m2, m3)) =
+      sdcl e m1 >>= (fn m1' =>
       whsdcl e m2 >>= (fn m2' =>
-      isMonad m2' >>= (fn m2'' =>
-      bequiv m1 m2'' >>= (fn _ =>
-      envWithTy v m1 e >>= (fn e' =>
-      whsdcl e' m3 >>= (fn m3' =>
-      isMonad m3' >>= (fn _ =>
-      return m3'))))))
+      whsdcl e m3 >>= (fn m3' =>
+      bequiv m2' m3' >>= (fn _ =>
+        (case m1' of
+          Lit BoolTyLit => return m2')))))
   | sdcl e (Let (v, m1, m2, m3)) =
       whsdcl e m1 >>= (fn m1' =>
       isSort m1' >>= (fn _ =>
@@ -356,20 +383,6 @@ struct
       envWithTy v m1 e >>= (fn e' =>
       whsdcl e' m3 >>= (fn m3' =>
       return (Let (v, m1, m2, m3'))))))))
-  | sdcl e (IfElse (m1, m2, m3)) =
-      sdcl e m1 >>= (fn m1' =>
-      whsdcl e m2 >>= (fn m2' =>
-      isMonad m2' >>= (fn m2'' =>
-      whsdcl e m3 >>= (fn m3' =>
-      isMonad m3' >>= (fn m3'' =>
-      bequiv m2'' m3'' >>= (fn _ =>
-        (case m1' of
-          Lit BoolTyLit => return m2')))))))
-  | sdcl e (App (m1, m2)) =
-      whsdcl e m1 >>= (fn m1' =>
-      sdcl e m2 >>= (fn m2' =>
-        (case m1' of
-          DepProduct (v, m1'', m2'') => subst v m2 m2'')))
   | sdcl e (Lambda (v, m1, m2)) =
       envWithTy v m1 e >>= (fn e' =>
       sdcl e' m2 >>= (fn m2' =>
@@ -381,6 +394,10 @@ struct
       whsdcl e' m2 >>= (fn m2' =>
       isSort m2' >>= (fn s2 =>
       rho s1 s2 >>= (fn s3 => return (Sort s3))))))
+  | sdcl e (DepSum (v, m1, m2)) = raise Fail ""
+  | sdcl e (Tuple (m1, m2, m3)) = raise Fail ""
+  | sdcl e (First m) = raise Fail ""
+  | sdcl e (Second m) = raise Fail ""
 
   fun checkVal e (v, m1, m2) = raise Fail ""
   fun checkData e (tname, tm, dcml) = raise Fail ""

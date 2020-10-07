@@ -46,10 +46,8 @@ sig
     Var of var
   | Lit of lit
   | Sort of sort
-  | Do of var * term * term * term
   | App of term * term
   | Case of term * (pattern * term) list * term
-  | Prim of operator * term list
   | IfElse of term * term * term
   | Let of var * term * term * term
   | Lambda of var * term * term
@@ -122,10 +120,8 @@ struct
     Var of var
   | Lit of lit
   | Sort of sort
-  | Do of var * term * term * term
   | App of term * term
   | Case of term * (pattern * term) list * term
-  | Prim of operator * term list
   | IfElse of term * term * term
   | Let of var * term * term * term
   | Lambda of var * term * term
@@ -153,8 +149,6 @@ struct
   fun eq (Var v) (Var v') = eqv v v'
   | eq (Lit l) (Lit l') = l = l'
   | eq (Sort s) (Sort s') = s = s'
-  | eq (Do (v, m1, m2, m3)) (Do (v', m1', m2', m3')) =
-      eqv v v' andalso eq m1 m1' andalso eq m2 m2' andalso eq m3 m3'
   | eq (App (m1, m2)) (App (m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (IfElse (m1, m2, m3)) (IfElse (m1', m2', m3')) =
