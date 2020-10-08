@@ -58,7 +58,7 @@ sig
   | Second of term
   type valdef = var * term * term
   type datadef = name * term * (name * term) list
-  type newtydef = name * term * name * term
+  type newtydef = name * term
   type classdef = name * (name * term) list
   type instancedef = name * name * (name * term) list
   datatype def =
@@ -132,7 +132,7 @@ struct
   | Second of term
   type valdef = var * term * term
   type datadef = name * term * (name * term) list
-  type newtydef = name * term * name * term
+  type newtydef = name * term
   type classdef = name * (name * term) list
   type instancedef = name * name * (name * term) list
   datatype def =
