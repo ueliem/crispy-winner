@@ -1,5 +1,5 @@
 structure MTSCheck : sig
-  include MONAD
+  include MONADZEROPLUS where type 'a monad = 'a InterpM.monad
   val isSort : MTS.term -> MTS.sort monad
   val isBottomSort : MTS.sort -> unit monad
   val isTopSort : MTS.sort -> unit monad

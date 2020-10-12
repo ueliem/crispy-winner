@@ -11,6 +11,12 @@ structure InterpM : sig
   val ask : env monad
   val loc : (env -> env) -> 'a monad -> 'a monad
 
+  val inEnv : MTS.var -> env -> bool
+  val isFresh : MTS.var -> unit monad
+  val trimEnv : MTS.var -> 'a monad -> 'a monad
+  val bindTy : MTS.var -> MTS.term -> 'a monad -> 'a monad
+  val bindDel : MTS.var -> MTS.term -> MTS.term -> 'a monad -> 'a monad
+
   val registerSort : MTS.sort -> unit monad
   val registerAxiom : MTS.sort -> MTS.sort -> unit monad
   val registerRule : MTS.sort -> MTS.sort -> MTS.sort -> unit monad
@@ -19,12 +25,7 @@ structure InterpM : sig
   val getAxioms : unit -> MTS.ax monad
   val getRules : unit -> MTS.rules monad
 
-  val inEnv : MTS.var -> env -> bool
-  val isFresh : MTS.var -> unit monad
-  val bindTy : MTS.var -> MTS.term -> 'a monad -> 'a monad
-  val bindDel : MTS.var -> MTS.term -> MTS.term -> 'a monad -> 'a monad
   val getTy : MTS.var -> MTS.term monad
-  val trimEnv : MTS.var -> MTS.term monad -> MTS.term monad
   val isLambda : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepSum : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
