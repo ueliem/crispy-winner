@@ -16,15 +16,6 @@ structure MTSCheck : sig
 
   val whsdcl : MTS.term -> MTS.term monad
   val sdcl : MTS.term -> MTS.term monad
-
-  (* val classTyForm : MTS.term -> MTS.sort monad
-  val classConForm : MTS.term -> MTS.var monad *)
-
-  val checkVal : MTS.valdef -> MTS.sort monad
-  val checkData : MTS.datadef -> MTS.sort monad
-  val checkNewTy : MTS.newtydef -> MTS.sort monad
-  val checkClass : MTS.classdef -> MTS.sort monad
-  val checkInstance : MTS.instancedef -> MTS.sort monad
 end
 =
 struct
@@ -189,12 +180,5 @@ struct
   | sdcl (Tuple (m1, m2, m3)) = raise Fail ""
   | sdcl (First m) = raise Fail ""
   | sdcl (Second m) = raise Fail ""
-
-  fun checkVal (v, m1, m2) = raise Fail ""
-  fun checkData (tname, tm, dcml) = raise Fail ""
-  fun checkNewTy (cname, cm) = raise Fail ""
-  fun checkClass (clname, cml) = raise Fail ""
-  fun checkInstance (clname, iname, cml) = raise Fail ""
-
 end
 

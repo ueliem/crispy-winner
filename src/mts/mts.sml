@@ -59,14 +59,15 @@ sig
   type valdef = var * term * term
   type datadef = name * term * (name * term) list
   type newtydef = name * term
-  type classdef = name * (name * term) list
+  type classdef = name * term * (name * term) list
   type instancedef = name * name * (name * term) list
   datatype def =
-    DefVal of valdef
-  | DefData of datadef
-  | DefNewTy of newtydef
-  | DefClass of classdef
-  | DefInstance of instancedef
+    DefVal of valdef * def
+  | DefData of datadef * def
+  | DefNewTy of newtydef * def
+  | DefClass of classdef * def
+  | DefInstance of instancedef * def
+  | DefEnd
 
   val eqv : var -> var -> bool
   val eq : term -> term -> bool
@@ -133,14 +134,15 @@ struct
   type valdef = var * term * term
   type datadef = name * term * (name * term) list
   type newtydef = name * term
-  type classdef = name * (name * term) list
+  type classdef = name * term * (name * term) list
   type instancedef = name * name * (name * term) list
   datatype def =
-    DefVal of valdef
-  | DefData of datadef
-  | DefNewTy of newtydef
-  | DefClass of classdef
-  | DefInstance of instancedef
+    DefVal of valdef * def
+  | DefData of datadef * def
+  | DefNewTy of newtydef * def
+  | DefClass of classdef * def
+  | DefInstance of instancedef * def
+  | DefEnd
 
   fun eqv (NamedVar n) (NamedVar n') = n = n'
   | eqv (IndexVar (i, _)) (IndexVar (i', _)) = i = i'
