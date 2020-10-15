@@ -200,6 +200,29 @@ struct
   fun asks f = ask >>= (fn e => return (f e))
 end
 
+functor ExceptionT (type e; structure M : MONAD) :
+sig
+  datatype 'a except =
+    ExcVal of 'a
+  | ExcErr of e
+  include MONAD where type 'a monad = 'a except M.monad
+  val lift : 'a M.monad -> 'a monad
+end
+=
+struct
+  datatype 'a except =
+    ExcVal of 'a
+  | ExcErr of e
+  type 'a monad = 'a except M.monad
+  fun return x = M.return (ExcVal x)
+  fun op >>= (m, f) =
+    M.>>= (m, (fn x =>
+      (case x of
+        ExcVal x' => f x'
+      | ExcErr x' => M.return (ExcErr x'))))
+  fun lift m = M.>>= (m, (fn x => M.return (ExcVal x)))
+end
+
 functor MUtil (structure M : MONAD) : sig
   include MONAD
   val liftM : ('a -> 'b) -> 'a monad -> 'b monad

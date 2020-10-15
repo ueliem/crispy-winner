@@ -1,6 +1,6 @@
 structure Defs : sig
   include MONADZEROPLUS where type 'a monad = 'a InterpM.monad
-  val checkDefs : MTS.def -> MTS.term monad
+  (* val checkDef : MTS.def -> MTS.term monad *)
 end
 =
 struct
@@ -24,21 +24,17 @@ struct
       checkMany dconml' >>= (fn ml =>
       return (m'::ml)))
 
-  fun checkDefs (DefEnd) = raise Fail ""
-  | checkDefs (DefVal ((v, m1, m2), next)) =
+  (* fun checkDef (DefVal ((v, m1, m2))) =
       bindDel v m1 m2 (sdcl m2 >>= (fn m2' =>
       bequiv m1 m2' >>= (fn _ =>
       checkDefs next)))
-  | checkDefs (DefData ((tcon, tm, dconml), next)) =
+  | checkDef (DefData ((tcon, tm, dconml))) =
       whsdcl tm >>= (fn s =>
       isSort s >>= (fn s' =>
         let
           val dconml' = map (fn (n, m) => (NamedVar n, m)) dconml
         in
-          bindManyTy (((NamedVar tcon), tm)::dconml') (checkDefs next)
-        end))
-  | checkDefs (DefNewTy ((tcon, tm), next)) = raise Fail ""
-  | checkDefs (DefClass ((v, m, vml), next)) = raise Fail ""
-  | checkDefs (DefInstance (_, next)) = raise Fail ""
+          bindManyTy (((NamedVar tcon), tm)::dconml')
+        end)) *)
 
 end

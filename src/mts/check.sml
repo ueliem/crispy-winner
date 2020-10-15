@@ -106,11 +106,6 @@ struct
       bindTy v m1 (elmtclass m2) >>= (fn s2 => rho s1 s2))
   | elmtclass (DepProduct (v, m1, m2)) =
       sortclass (DepProduct (v, m1, m2)) >>= plus
-  | elmtclass (DepSum (v, m1, m2)) =
-      sortclass (DepSum (v, m1, m2)) >>= plus
-  | elmtclass (Tuple (m1, m2, m3)) = raise Fail ""
-  | elmtclass (First m) = raise Fail ""
-  | elmtclass (Second m) = raise Fail ""
 
   and sortclass (Var v) = elmtclass (Var v) >>= minus
   | sortclass (Lit (IntLit _)) = zero ()
@@ -131,12 +126,6 @@ struct
   | sortclass (DepProduct (v, m1, m2)) =
       sortclass m1 >>= (fn s1 =>
       bindTy v m1 (sortclass m2) >>= (fn s2 => rho s1 s2))
-  | sortclass (DepSum (v, m1, m2)) =
-      sortclass m1 >>= (fn s1 =>
-      bindTy v m1 (sortclass m2) >>= (fn s2 => rho s1 s2))
-  | sortclass (Tuple (m1, m2, m3)) = raise Fail ""
-  | sortclass (First m) = raise Fail ""
-  | sortclass (Second m) = raise Fail ""
 
   fun whsdcl m =
     sdcl m >>= (fn m' => whreduce m' >>= (fn m'' => return m''))
@@ -176,9 +165,5 @@ struct
       sortclass m1 >>= (fn s1 =>
       bindTy v m1 (whsdcl m2 >>= (fn m2' => isSort m2')) >>= (fn s2 =>
       rho s1 s2 >>= (fn s3 => return (Sort s3))))
-  | sdcl (DepSum (v, m1, m2)) = raise Fail ""
-  | sdcl (Tuple (m1, m2, m3)) = raise Fail ""
-  | sdcl (First m) = raise Fail ""
-  | sdcl (Second m) = raise Fail ""
 end
 

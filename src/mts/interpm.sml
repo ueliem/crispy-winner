@@ -3,6 +3,7 @@ structure InterpM : sig
   datatype enventry =
     EnvTy of MTS.var * MTS.term
   | EnvDel of MTS.var * MTS.term * MTS.term
+  | EnvSpec of MTS.var * MTS.specification
   type env = enventry list
   type s = MTS.sorts * MTS.ax * MTS.rules
 
@@ -28,7 +29,6 @@ structure InterpM : sig
   val getTy : MTS.var -> MTS.term monad
   val isLambda : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
-  val isDepSum : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
 
   val subst : MTS.var -> MTS.term -> MTS.term -> MTS.term monad
@@ -44,6 +44,7 @@ struct
   datatype enventry =
     EnvTy of MTS.var * MTS.term
   | EnvDel of MTS.var * MTS.term * MTS.term
+  | EnvSpec of MTS.var * MTS.specification
   type env = enventry list
   type s = MTS.sorts * MTS.ax * MTS.rules
   structure M = StateFunctor (type s = s)
@@ -128,9 +129,6 @@ struct
   fun isDepProduct (DepProduct (v, m1, m2)) = return (v, m1, m2)
   | isDepProduct _ = zero ()
 
-  fun isDepSum (DepSum (v, m1, m2)) = return (v, m1, m2)
-  | isDepSum _ = zero ()
-
   fun isBoolTy (Lit BoolTyLit) = return ()
   | isBoolTy _ = zero ()
 
@@ -161,21 +159,6 @@ struct
       (subst x x' m1 >>= (fn m1' =>
       (subst x x' m2 >>= (fn m2' =>
         return (DepProduct (v, m1', m2'))))))
-  | subst x x' (DepSum (v, m1, m2)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-        return (DepSum (v, m1', m2'))))))
-  | subst x x' (Tuple (m1, m2, m3)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-      (subst x x' m3 >>= (fn m3' =>
-        return (Tuple (m1', m2', m3'))))))))
-  | subst x x' (First m) =
-      (subst x x' m >>= (fn m' =>
-        return (First m')))
-  | subst x x' (Second m) =
-      (subst x x' m >>= (fn m' =>
-        return (Second m')))
 
   fun nfstep (Var _) = zero ()
   | nfstep (Lit _) = zero ()
@@ -199,10 +182,6 @@ struct
   | nfstep (DepProduct (v, m1, m2)) =
       (nfstep m1 >>= (fn m1' => return (DepProduct (v, m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (DepProduct (v, m1, m2'))))
-  | nfstep (DepSum (v, m1, m2)) = raise Fail ""
-  | nfstep (Tuple (m1, m2, m3)) = raise Fail ""
-  | nfstep (First m) = raise Fail ""
-  | nfstep (Second m) = raise Fail ""
 
   fun nfreduce m =
     (nfstep m >>= (fn m' => nfreduce m')) ++ return m
@@ -228,10 +207,6 @@ struct
   | whstep (DepProduct (v, m1, m2)) =
       (whstep m1 >>= (fn m1' => return (DepProduct (v, m1', m2))))
       ++ (whstep m2 >>= (fn m2' => return (DepProduct (v, m1, m2'))))
-  | whstep (DepSum (v, m1, m2)) = raise Fail ""
-  | whstep (Tuple (m1, m2, m3)) = raise Fail ""
-  | whstep (First m) = raise Fail ""
-  | whstep (Second m) = raise Fail ""
 
   fun whreduce m =
     (whstep m >>= (fn m' => whreduce m')) ++ return m

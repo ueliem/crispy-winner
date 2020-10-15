@@ -14,24 +14,6 @@ sig
   type sorts = sort list
   type ax = (sort * sort) list
   type rules = (sort * sort * sort) list
-  datatype iop =
-    IOpAdd
-  | IOpSub
-  | IOpMul
-  | IOpDiv
-  | IOpGT
-  | IOpGE
-  | IOpLT
-  | IOpLE
-  datatype bop =
-    BOpAnd
-  | BOpOr
-  | BOpXOr
-  | BOpNot
-  datatype operator =
-    OpInt of iop
-  | OpBool of bop
-  | OpSelect of int
   datatype lit =
     IntLit of int
   | BoolLit of bool
@@ -42,8 +24,12 @@ sig
   | PatVar of name
   | PatTuple of pattern * pattern
   | PatCons of name * pattern list
+  datatype modpath =
+    PathVar of name
+  | PathMod of modpath * name
   datatype term =
     Var of var
+  | Path of modpath
   | Lit of lit
   | Sort of sort
   | App of term * term
@@ -52,22 +38,26 @@ sig
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
-  | DepSum of var * term * term
-  | Tuple of term * term * term
-  | First of term
-  | Second of term
-  type valdef = var * term * term
   type datadef = name * term * (name * term) list
-  type newtydef = name * term
-  type classdef = name * term * (name * term) list
-  type instancedef = name * name * (name * term) list
   datatype def =
-    DefVal of valdef * def
-  | DefData of datadef * def
-  | DefNewTy of newtydef * def
-  | DefClass of classdef * def
-  | DefInstance of instancedef * def
-  | DefEnd
+    DefVal of var * term * term
+  | DefData of datadef
+  | DefMod of name * modexpr
+  | DefModSig of name * modexpr * modtype
+  | DefModTransparent of name * modexpr
+  and modtype =
+    ModTypeSig of specification list
+  | ModTypeFunctor of var * modtype * modtype
+  and specification =
+    SpecAbsMod of modtype
+  | SpecManifestMod of modtype * modexpr
+  | SpecAbsTerm of term
+  | SpecManifestTerm of term * term
+  and modexpr =
+    ModStruct of def list
+  | ModFunctor of var * modtype * modexpr
+  | ModApp of modexpr * modexpr
+  | ModPath of modpath
 
   val eqv : var -> var -> bool
   val eq : term -> term -> bool
@@ -89,24 +79,6 @@ struct
   type sorts = sort list
   type ax = (sort * sort) list
   type rules = (sort * sort * sort) list
-  datatype iop =
-    IOpAdd
-  | IOpSub
-  | IOpMul
-  | IOpDiv
-  | IOpGT
-  | IOpGE
-  | IOpLT
-  | IOpLE
-  datatype bop =
-    BOpAnd
-  | BOpOr
-  | BOpXOr
-  | BOpNot
-  datatype operator =
-    OpInt of iop
-  | OpBool of bop
-  | OpSelect of int
   datatype lit =
     IntLit of int
   | BoolLit of bool
@@ -117,8 +89,12 @@ struct
   | PatVar of name
   | PatTuple of pattern * pattern
   | PatCons of name * pattern list
+  datatype modpath =
+    PathVar of name
+  | PathMod of modpath * name
   datatype term =
     Var of var
+  | Path of modpath
   | Lit of lit
   | Sort of sort
   | App of term * term
@@ -127,22 +103,26 @@ struct
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
-  | DepSum of var * term * term
-  | Tuple of term * term * term
-  | First of term
-  | Second of term
-  type valdef = var * term * term
   type datadef = name * term * (name * term) list
-  type newtydef = name * term
-  type classdef = name * term * (name * term) list
-  type instancedef = name * name * (name * term) list
   datatype def =
-    DefVal of valdef * def
-  | DefData of datadef * def
-  | DefNewTy of newtydef * def
-  | DefClass of classdef * def
-  | DefInstance of instancedef * def
-  | DefEnd
+    DefVal of var * term * term
+  | DefData of datadef
+  | DefMod of name * modexpr
+  | DefModSig of name * modexpr * modtype
+  | DefModTransparent of name * modexpr
+  and modtype =
+    ModTypeSig of specification list
+  | ModTypeFunctor of var * modtype * modtype
+  and specification =
+    SpecAbsMod of modtype
+  | SpecManifestMod of modtype * modexpr
+  | SpecAbsTerm of term
+  | SpecManifestTerm of term * term
+  and modexpr =
+    ModStruct of def list
+  | ModFunctor of var * modtype * modexpr
+  | ModApp of modexpr * modexpr
+  | ModPath of modpath
 
   fun eqv (NamedVar n) (NamedVar n') = n = n'
   | eqv (IndexVar (i, _)) (IndexVar (i', _)) = i = i'
