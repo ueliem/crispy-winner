@@ -4,7 +4,6 @@ sig
   datatype var =
     NamedVar of name
   | GenVar of int
-  | IndexVar of int * name
   | AnonVar
   datatype sort =
     TypeVal
@@ -58,6 +57,10 @@ sig
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
   | ModPath of modpath
+  and toplvl =
+    TopSpec of specification
+  | TopDef of def
+  type program = (var * toplvl) list
 
   val eqv : var -> var -> bool
   val eq : term -> term -> bool
@@ -69,7 +72,6 @@ struct
   datatype var =
     NamedVar of name
   | GenVar of int
-  | IndexVar of int * name
   | AnonVar
   datatype sort =
     TypeVal
@@ -123,24 +125,65 @@ struct
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
   | ModPath of modpath
+  and toplvl =
+    TopSpec of specification
+  | TopDef of def
+  type program = (var * toplvl) list
 
   fun eqv (NamedVar n) (NamedVar n') = n = n'
-  | eqv (IndexVar (i, _)) (IndexVar (i', _)) = i = i'
-  | eqv _ _ = raise Fail "gotta think on this"
+  fun eqv (GenVar n) (GenVar n') = n = n'
+  | eqv _ _ = false
+
+  fun subst x x' (Var v) =
+      if eqv v x then x' else Var v
+  | subst x x' (Path p) = Path p
+  | subst x x' (Lit l) = Lit l
+  | subst x x' (Sort s) = Sort s
+  | subst x x' (App (m1, m2)) =
+      App (subst x x' m1, subst x x' m2)
+  | subst x x' (Case (m1, pml, m2)) = raise Fail ""
+  | subst x x' (IfElse (m1, m2, m3)) =
+      IfElse (subst x x' m1, subst x x' m2, subst x x' m3)
+  | subst x x' (Let (v, m1, m2, m3)) =
+      Let (v, subst x x' m1, subst x x' m2, subst x x' m3)
+  | subst x x' (Lambda (v, m1, m2)) =
+      Lambda (v, subst x x' m1, subst x x' m2)
+  | subst x x' (DepProduct (v, m1, m2)) =
+      DepProduct (v, subst x x' m1, subst x x' m2)
 
   fun eq (Var v) (Var v') = eqv v v'
+  | eq (Path p) (Path p') = p = p'
   | eq (Lit l) (Lit l') = l = l'
   | eq (Sort s) (Sort s') = s = s'
   | eq (App (m1, m2)) (App (m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
+  | eq (Case (m1, pml, m2)) (Case (m1', pml', m2')) =
+      raise Fail ""
   | eq (IfElse (m1, m2, m3)) (IfElse (m1', m2', m3')) =
       eq m1 m1' andalso eq m2 m2' andalso eq m3 m3'
+
   | eq (Let (v, m1, m2, m3)) (Let (v', m1', m2', m3')) =
-      eqv v v' andalso eq m1 m1' andalso eq m2 m2'
+      eqv v v'
+        andalso eq m1 m1'
+        andalso eq m2 m2'
+        andalso eq m3 m3'
+
+  | eq (Lambda (AnonVar, m1, m2)) (Lambda (_, m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
+  | eq (Lambda (_, m1, m2)) (Lambda (AnonVar, m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
   | eq (Lambda (v, m1, m2)) (Lambda (v', m1', m2')) =
-      eqv v v' andalso eq m1 m1' andalso eq m2 m2'
+      if eqv v v' then eq m1 m1' andalso eq m2 m2'
+      else raise Fail ""
+
+  | eq (DepProduct (AnonVar, m1, m2)) (DepProduct (_, m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
+  | eq (DepProduct (_, m1, m2)) (DepProduct (AnonVar, m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
   | eq (DepProduct (v, m1, m2)) (DepProduct (v', m1', m2')) =
-      eqv v v' andalso eq m1 m1' andalso eq m2 m2'
+      if eqv v v' then eq m1 m1' andalso eq m2 m2'
+      else raise Fail ""
+
   | eq _ _ = false
 
 end

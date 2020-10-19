@@ -31,7 +31,6 @@ structure InterpM : sig
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
 
-  val subst : MTS.var -> MTS.term -> MTS.term -> MTS.term monad
   val whstep : MTS.term -> MTS.term monad
   val whreduce : MTS.term -> MTS.term monad
   val nfstep : MTS.term -> MTS.term monad
@@ -131,34 +130,6 @@ struct
 
   fun isBoolTy (Lit BoolTyLit) = return ()
   | isBoolTy _ = zero ()
-
-  fun subst x x' (Var v) =
-      if v = x then return (Var v) else return (Var v)
-  | subst x x' (Lit l) = return (Lit l)
-  | subst x x' (Sort s) = return (Sort s)
-  | subst x x' (App (m1, m2)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-        return (App (m1', m2'))))))
-  | subst x x' (Case (m1, pml, m2)) = raise Fail ""
-  | subst x x' (IfElse (m1, m2, m3)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-      (subst x x' m3 >>= (fn m3' =>
-        return (IfElse (m1', m2', m3'))))))))
-  | subst x x' (Let (v, m1, m2, m3)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-      (subst x x' m3 >>= (fn m3' =>
-        return (Let (v, m1', m2', m3'))))))))
-  | subst x x' (Lambda (v, m1, m2)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-        return (Lambda (v, m1', m2'))))))
-  | subst x x' (DepProduct (v, m1, m2)) =
-      (subst x x' m1 >>= (fn m1' =>
-      (subst x x' m2 >>= (fn m2' =>
-        return (DepProduct (v, m1', m2'))))))
 
   fun nfstep (Var _) = zero ()
   | nfstep (Lit _) = zero ()
