@@ -1,9 +1,6 @@
 structure InterpM : sig
   include MONADZEROPLUS
-  datatype enventry =
-    EnvTy of MTS.var * MTS.term
-  | EnvDel of MTS.var * MTS.term * MTS.term
-  | EnvSpec of MTS.var * MTS.specification
+  type enventry = MTS.var * MTS.specification
   type env = enventry list
   type s = MTS.sorts * MTS.ax * MTS.rules
 
@@ -11,12 +8,16 @@ structure InterpM : sig
   val putstate : s -> unit monad
   val ask : env monad
   val loc : (env -> env) -> 'a monad -> 'a monad
+  val throw : unit -> 'a monad
 
   val inEnv : MTS.var -> env -> bool
   val isFresh : MTS.var -> unit monad
   val trimEnv : MTS.var -> 'a monad -> 'a monad
-  val bindTy : MTS.var -> MTS.term -> 'a monad -> 'a monad
-  val bindDel : MTS.var -> MTS.term -> MTS.term -> 'a monad -> 'a monad
+  val bindAbsTerm : MTS.var -> MTS.term -> 'a monad -> 'a monad
+  val bindManifestTerm : MTS.var -> MTS.term -> MTS.term -> 'a monad -> 'a monad
+  val bindAbsMod : MTS.var -> MTS.modtype -> 'a monad -> 'a monad
+  val bindManifestMod : MTS.var -> MTS.modtype -> MTS.modexpr -> 'a monad -> 'a monad
+  val bindSpec : MTS.var -> MTS.specification -> 'a monad -> 'a monad
 
   val registerSort : MTS.sort -> unit monad
   val registerAxiom : MTS.sort -> MTS.sort -> unit monad
@@ -40,26 +41,26 @@ structure InterpM : sig
 end
 =
 struct
-  datatype enventry =
-    EnvTy of MTS.var * MTS.term
-  | EnvDel of MTS.var * MTS.term * MTS.term
-  | EnvSpec of MTS.var * MTS.specification
+  type enventry = MTS.var * MTS.specification
   type env = enventry list
   type s = MTS.sorts * MTS.ax * MTS.rules
   structure M = StateFunctor (type s = s)
   structure MM = ReaderT (type s = env; structure M = M)
-  structure MMM = OptionT (structure M = MM)
-  structure Util = MUtil (structure M = MMM)
-  open MMM
+  structure MMM = ExceptionT (type e = unit; structure M = MM)
+  structure MMMM = OptionT (structure M = MMM)
+  structure Util = MUtil (structure M = MMMM)
+  open MMMM
   open MTS
 
-  val getstate = lift (MM.lift M.get)
+  val getstate = lift (MMM.lift (MM.lift M.get))
 
-  val putstate = (fn st => lift (MM.lift (M.put st)))
+  val putstate = (fn st => lift (MMM.lift (MM.lift (M.put st))))
 
-  val ask = lift MM.ask
+  val ask = lift (MMM.lift MM.ask)
 
   fun loc f m = (MM.loc f) m
+
+  fun throw () = MMM.throw ()
 
   fun registerSort srt =
     getstate >>= (fn (srts, axs, rls) =>
@@ -83,61 +84,64 @@ struct
     getstate >>= (fn (srts, axs, rls) => return rls)
 
   fun inEnv v e =
-    List.exists (fn x => (case x of
-        EnvTy (v', m) => v = v'
-      | EnvDel (v', m1, m2) => v = v')) e
+    List.exists (fn (v', x) => v = v') e
 
   fun isFresh v =
     ask >>= (fn e =>
-    if inEnv v e then zero ()
+    if inEnv v e then throw ()
     else return ())
 
-  fun bindTy v m =
-    loc (fn e => (EnvTy (v, m))::e)
+  fun bindAbsTerm v m =
+    loc (fn e => (v, SpecAbsTerm m)::e)
 
-  fun bindDel v m1 m2 =
-    loc (fn e => (EnvDel (v, m1, m2))::e)
+  fun bindManifestTerm v m1 m2 =
+    loc (fn e => (v, SpecManifestTerm (m1, m2))::e)
+
+  fun bindAbsMod v m =
+    loc (fn e => (v, SpecAbsMod m)::e)
+
+  fun bindManifestMod v m1 m2 =
+    loc (fn e => (v, SpecManifestMod (m1, m2))::e)
+
+  fun bindSpec v s =
+    loc (fn e => (v, s)::e)
 
   fun getTy v =
     ask >>= (fn e =>
-      case List.find (fn x => (case x of
-          EnvTy (v', m) => v = v'
-        | EnvDel (v', m1, m2) => v = v')) e of
-        SOME (EnvTy (_, m)) => return m
-      | SOME (EnvDel (_, m, _)) => return m
-      | NONE => zero ())
+      case List.find (fn (v', x) => v = v') e of
+        SOME (_, SpecAbsMod _) => throw ()
+      | SOME (_, SpecManifestMod _) => throw ()
+      | SOME (_, SpecAbsTerm m) => return m
+      | SOME (_, SpecManifestTerm (m, _)) => return m
+      | NONE => throw ())
 
   fun trimEnv v =
     let
       fun f (e0) ([]) = raise Fail "should not happen if you checked"
-      | f (e0) (e::e1) =
-        (case e of
-          EnvTy (v', m) =>
-            if eqv v v' then List.rev e0
-            else f (e::e0) e1
-        | EnvDel (v', m1, m2) =>
-            if eqv v v' then List.rev e0
-            else f (e::e0) e1)
+      | f (e0) ((v', e)::e1) =
+          if eqv v v' then List.rev e0
+          else f ((v', e)::e0) e1
     in
       loc (f [])
     end
 
   fun isLambda (Lambda (v, m1, m2)) = return (v, m1, m2)
-  | isLambda _ = zero ()
+  | isLambda _ = throw ()
 
   fun isDepProduct (DepProduct (v, m1, m2)) = return (v, m1, m2)
-  | isDepProduct _ = zero ()
+  | isDepProduct _ = throw ()
 
   fun isBoolTy (Lit BoolTyLit) = return ()
-  | isBoolTy _ = zero ()
+  | isBoolTy _ = throw ()
 
   fun nfstep (Var _) = zero ()
+  | nfstep (Path _) = zero ()
   | nfstep (Lit _) = zero ()
   | nfstep (Sort _) = zero ()
   | nfstep (App (m1, m2)) =
       (nfstep m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (App (m1, m2'))))
-      ++ (isLambda m1 >>= (fn (v, m3, m4) => subst v m2 m4))
+      ++ (isLambda m1 >>= (fn (v, m3, m4) => return (subst v m2 m4)))
   | nfstep (Case (m1, pml, m2)) = raise Fail ""
   | nfstep (IfElse (m1, m2, m3)) =
       (nfstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
@@ -158,11 +162,12 @@ struct
     (nfstep m >>= (fn m' => nfreduce m')) ++ return m
 
   fun whstep (Var _) = zero ()
+  | whstep (Path _) = zero ()
   | whstep (Lit _) = zero ()
   | whstep (Sort _) = zero ()
   | whstep (App (m1, m2)) =
       (whstep m1 >>= (fn m1' => return (App (m1', m2))))
-      ++ (isLambda m1 >>= (fn (v, m3, m4) => subst v m2 m4))
+      ++ (isLambda m1 >>= (fn (v, m3, m4) => return (subst v m2 m4)))
   | whstep (Case (m1, pml, m2)) = raise Fail ""
   | whstep (IfElse (m1, m2, m3)) =
       (whstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
@@ -186,7 +191,7 @@ struct
     nfreduce m1 >>= (fn m1' =>
     nfreduce m2 >>= (fn m2' =>
       if eq m1' m2' then return ()
-      else zero ()))
+      else throw ()))
 
 end
 

@@ -207,6 +207,7 @@ sig
   | ExcErr of e
   include MONAD where type 'a monad = 'a except M.monad
   val lift : 'a M.monad -> 'a monad
+  val throw : e -> 'a monad
 end
 =
 struct
@@ -221,6 +222,8 @@ struct
         ExcVal x' => f x'
       | ExcErr x' => M.return (ExcErr x'))))
   fun lift m = M.>>= (m, (fn x => M.return (ExcVal x)))
+
+  fun throw e = M.return (ExcErr e)
 end
 
 functor MUtil (structure M : MONAD) : sig
