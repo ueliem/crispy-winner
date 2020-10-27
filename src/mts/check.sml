@@ -16,6 +16,8 @@ structure MTSCheck : sig
 
   val whsdcl : MTS.term -> MTS.term monad
   val sdcl : MTS.term -> MTS.term monad
+
+  val checkPath : MTS.modpath -> MTS.specification monad
 end
 =
 struct
@@ -68,21 +70,21 @@ struct
     getstate >>= (fn (srts, axs, rls) =>
       (case List.find (fn (s1, s2') => s2 = s2') axs of
         SOME (s1, s2) => return s1
-      | NONE => zero ()))
+      | NONE => throw ()))
 
   fun rho s1 s2 =
     getstate >>= (fn (srts, axs, rls) =>
       (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
-      | NONE => zero ()))
+      | NONE => throw ()))
 
   fun mu s1 s2 =
     getstate >>= (fn (srts, axs, rls) =>
       (case List.find (fn (s1', s3, s2') => s1 = s1' andalso s2 = s2') rls of
         SOME (_, s3, _) => return s3
-      | NONE => zero ()))
+      | NONE => throw ()))
 
-  fun elmtclass (Var v) =
+  fun elmtclass (Path ([], v)) =
       getTy v >>= (fn m =>
       trimEnv v (sortclass m))
   | elmtclass (Path p) = raise Fail ""
@@ -108,7 +110,7 @@ struct
   | elmtclass (DepProduct (v, m1, m2)) =
       sortclass (DepProduct (v, m1, m2)) >>= plus
 
-  and sortclass (Var v) = elmtclass (Var v) >>= minus
+  and sortclass (Path ([], v)) = elmtclass (Path ([], v)) >>= minus
   | sortclass (Path p) = raise Fail ""
   | sortclass (Lit (IntLit _)) = zero ()
   | sortclass (Lit (IntTyLit)) = return TypeVal
@@ -131,7 +133,7 @@ struct
 
   fun whsdcl m =
     sdcl m >>= (fn m' => whreduce m' >>= (fn m'' => return m''))
-  and sdcl (Var v) =
+  and sdcl (Path ([], v)) =
       getTy v >>= (fn m =>
       whsdcl m >>= (fn m' =>
       isSort m' >>= (fn _ =>
@@ -168,5 +170,11 @@ struct
       sortclass m1 >>= (fn s1 =>
       bindAbsTerm v m1 (whsdcl m2 >>= (fn m2' => isSort m2')) >>= (fn s2 =>
       rho s1 s2 >>= (fn s3 => return (Sort s3))))
+
+  fun checkPath ([], v) = getSpec v
+  | checkPath (p::ps, v) =
+      checkPath (ps, p) >>= (fn s =>
+      isSig s >>= (fn s' =>
+      return (field (p::ps, v) s')))
 end
 

@@ -28,9 +28,12 @@ structure InterpM : sig
   val getRules : unit -> MTS.rules monad
 
   val getTy : MTS.var -> MTS.term monad
+  val getSpec : MTS.var -> MTS.specification monad
   val isLambda : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
+  val getModtype : MTS.var -> MTS.modtype monad
+  val isSig : MTS.specification -> (MTS.var * MTS.specification) list monad
 
   val whstep : MTS.term -> MTS.term monad
   val whreduce : MTS.term -> MTS.term monad
@@ -115,6 +118,12 @@ struct
       | SOME (_, SpecManifestTerm (m, _)) => return m
       | NONE => throw ())
 
+  fun getSpec v =
+    ask >>= (fn e =>
+      case List.find (fn (v', x) => v = v') e of
+        SOME (_, s) => return s
+      | NONE => throw ())
+
   fun trimEnv v =
     let
       fun f (e0) ([]) = raise Fail "should not happen if you checked"
@@ -134,8 +143,17 @@ struct
   fun isBoolTy (Lit BoolTyLit) = return ()
   | isBoolTy _ = throw ()
 
-  fun nfstep (Var _) = zero ()
-  | nfstep (Path _) = zero ()
+  fun getModtype p =
+    getSpec p >>= (fn s => (case s of
+      SpecAbsMod m => return m
+    | SpecManifestMod (m, _) => return m
+    | _ => throw ()))
+
+  and isSig (SpecAbsMod (ModTypeSig vsl)) = return vsl
+  | isSig (SpecManifestMod (ModTypeSig vsl, _)) = return vsl
+  | isSig _ = throw ()
+
+  fun nfstep (Path _) = zero ()
   | nfstep (Lit _) = zero ()
   | nfstep (Sort _) = zero ()
   | nfstep (App (m1, m2)) =
@@ -161,8 +179,7 @@ struct
   fun nfreduce m =
     (nfstep m >>= (fn m' => nfreduce m')) ++ return m
 
-  fun whstep (Var _) = zero ()
-  | whstep (Path _) = zero ()
+  fun whstep (Path _) = zero ()
   | whstep (Lit _) = zero ()
   | whstep (Sort _) = zero ()
   | whstep (App (m1, m2)) =

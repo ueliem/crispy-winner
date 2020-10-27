@@ -23,12 +23,9 @@ sig
   | PatVar of name
   | PatTuple of pattern * pattern
   | PatCons of name * pattern list
-  datatype modpath =
-    PathVar of name
-  | PathMod of modpath * name
+  type modpath = var list * var
   datatype term =
-    Var of var
-  | Path of modpath
+    Path of modpath
   | Lit of lit
   | Sort of sort
   | App of term * term
@@ -68,6 +65,7 @@ sig
   val substModexpr : var -> term -> modexpr -> modexpr
   val eqv : var -> var -> bool
   val eq : term -> term -> bool
+  val field : modpath -> (var * specification) list -> specification
 
 end
 =
@@ -95,12 +93,9 @@ struct
   | PatVar of name
   | PatTuple of pattern * pattern
   | PatCons of name * pattern list
-  datatype modpath =
-    PathVar of name
-  | PathMod of modpath * name
+  type modpath = var list * var
   datatype term =
-    Var of var
-  | Path of modpath
+    Path of modpath
   | Lit of lit
   | Sort of sort
   | App of term * term
@@ -137,8 +132,8 @@ struct
   | eqv (GenVar n) (GenVar n') = (n = n')
   | eqv _ _ = false
 
-  fun subst x x' (Var v) =
-      if eqv v x then x' else Var v
+  fun subst x x' (Path ([], v)) =
+    if eqv x v then x' else Path ([], v)
   | subst x x' (Path p) = Path p
   | subst x x' (Lit l) = Lit l
   | subst x x' (Sort s) = Sort s
@@ -178,8 +173,7 @@ struct
       ModApp (substModexpr x x' m1, substModexpr x x' m2)
   | substModexpr x x' (ModPath p) = ModPath p
 
-  fun eq (Var v) (Var v') = eqv v v'
-  | eq (Path p) (Path p') = p = p'
+  fun eq (Path p) (Path p') = p = p'
   | eq (Lit l) (Lit l') = l = l'
   | eq (Sort s) (Sort s') = s = s'
   | eq (App (m1, m2)) (App (m1', m2')) =
@@ -194,22 +188,30 @@ struct
       eq m1 m1' andalso eq m2 m2' andalso eq m3 m3'
   | eq (Let (v, m1, m2, m3)) (Let (v', m1', m2', m3')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2' andalso eq m3 m3'
-      else eq m1 m1' andalso eq m2 m2' andalso eq m3 (subst v' (Var v) m3')
+      else eq m1 m1' andalso eq m2 m2'
+        andalso eq m3 (subst v' (Path ([], v)) m3')
   | eq (Lambda (AnonVar, m1, m2)) (Lambda (_, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (Lambda (_, m1, m2)) (Lambda (AnonVar, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (Lambda (v, m1, m2)) (Lambda (v', m1', m2')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
-      else eq m1 m1' andalso eq m2 (subst v' (Var v) m2')
+      else eq m1 m1' andalso eq m2 (subst v' (Path ([], v)) m2')
   | eq (DepProduct (AnonVar, m1, m2)) (DepProduct (_, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (DepProduct (_, m1, m2)) (DepProduct (AnonVar, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (DepProduct (v, m1, m2)) (DepProduct (v', m1', m2')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
-      else eq m1 m1' andalso eq m2 (subst v' (Var v) m2')
+      else eq m1 m1' andalso eq m2 (subst v' (Path ([], v)) m2')
   | eq _ _ = false
+
+  fun field ([], x) s = raise Fail ""
+  | field (p, x) ([]) = raise Fail ""
+  | field (p, x) ((x', s)::xs) =
+      if eqv x x' then s
+      else field (p, x) (map (fn (x'', s') =>
+        (x'', substSpec x' (Path (p, x')) s')) xs)
 
 end
 
