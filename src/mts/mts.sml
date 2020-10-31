@@ -23,9 +23,11 @@ sig
   | PatVar of name
   | PatTuple of pattern * pattern
   | PatCons of name * pattern list
-  type modpath = var list * var
-  datatype term =
-    Path of modpath
+  datatype path =
+    PVar of var
+  | PPath of modexpr * var
+  and term =
+    Path of path
   | Lit of lit
   | Sort of sort
   | App of term * term
@@ -34,7 +36,7 @@ sig
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
-  datatype def =
+  and def =
     DefVal of term
   | DefData of term * (name * term) list
   | DefMod of modexpr
@@ -52,7 +54,7 @@ sig
     ModStruct of (var * def) list
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
-  | ModPath of modpath
+  | ModPath of path
   and toplvl =
     TopSpec of specification
   | TopDef of def
@@ -61,11 +63,10 @@ sig
   val subst : var -> term -> term -> term
   val substDef : var -> term -> def -> def
   val substSpec : var -> term -> specification -> specification
-  val substModtype: var -> term -> modtype -> modtype
+  val substModtype : var -> term -> modtype -> modtype
   val substModexpr : var -> term -> modexpr -> modexpr
   val eqv : var -> var -> bool
   val eq : term -> term -> bool
-  val field : modpath -> (var * specification) list -> specification
 
 end
 =
@@ -93,9 +94,11 @@ struct
   | PatVar of name
   | PatTuple of pattern * pattern
   | PatCons of name * pattern list
-  type modpath = var list * var
-  datatype term =
-    Path of modpath
+  datatype path =
+    PVar of var
+  | PPath of modexpr * var
+  and term =
+    Path of path
   | Lit of lit
   | Sort of sort
   | App of term * term
@@ -104,7 +107,7 @@ struct
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
-  datatype def =
+  and def =
     DefVal of term
   | DefData of term * (name * term) list
   | DefMod of modexpr
@@ -122,7 +125,7 @@ struct
     ModStruct of (var * def) list
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
-  | ModPath of modpath
+  | ModPath of path
   and toplvl =
     TopSpec of specification
   | TopDef of def
@@ -132,8 +135,8 @@ struct
   | eqv (GenVar n) (GenVar n') = (n = n')
   | eqv _ _ = false
 
-  fun subst x x' (Path ([], v)) =
-    if eqv x v then x' else Path ([], v)
+  fun subst x x' (Path (PVar v)) =
+    if eqv x v then x' else Path (PVar v)
   | subst x x' (Path p) = Path p
   | subst x x' (Lit l) = Lit l
   | subst x x' (Sort s) = Sort s
@@ -189,29 +192,22 @@ struct
   | eq (Let (v, m1, m2, m3)) (Let (v', m1', m2', m3')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2' andalso eq m3 m3'
       else eq m1 m1' andalso eq m2 m2'
-        andalso eq m3 (subst v' (Path ([], v)) m3')
+        andalso eq m3 (subst v' (Path (PVar v)) m3')
   | eq (Lambda (AnonVar, m1, m2)) (Lambda (_, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (Lambda (_, m1, m2)) (Lambda (AnonVar, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (Lambda (v, m1, m2)) (Lambda (v', m1', m2')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
-      else eq m1 m1' andalso eq m2 (subst v' (Path ([], v)) m2')
+      else eq m1 m1' andalso eq m2 (subst v' (Path (PVar v)) m2')
   | eq (DepProduct (AnonVar, m1, m2)) (DepProduct (_, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (DepProduct (_, m1, m2)) (DepProduct (AnonVar, m1', m2')) =
       eq m1 m1' andalso eq m2 m2'
   | eq (DepProduct (v, m1, m2)) (DepProduct (v', m1', m2')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
-      else eq m1 m1' andalso eq m2 (subst v' (Path ([], v)) m2')
+      else eq m1 m1' andalso eq m2 (subst v' (Path (PVar v)) m2')
   | eq _ _ = false
-
-  fun field ([], x) s = raise Fail ""
-  | field (p, x) ([]) = raise Fail ""
-  | field (p, x) ((x', s)::xs) =
-      if eqv x x' then s
-      else field (p, x) (map (fn (x'', s') =>
-        (x'', substSpec x' (Path (p, x')) s')) xs)
 
 end
 
