@@ -33,8 +33,8 @@ structure InterpM : sig
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
   val getModtype : MTS.var -> MTS.modtype monad
-  val isSig : MTS.specification -> (MTS.var * MTS.specification) list monad
-  val isFuncT : MTS.specification -> (MTS.var * MTS.modtype * MTS.modtype) monad
+  val isSig : MTS.modtype -> (MTS.var * MTS.specification) list monad
+  val isFuncT : MTS.modtype -> (MTS.var * MTS.modtype * MTS.modtype) monad
   val isTermTy : MTS.specification -> MTS.term monad
 
   val whstep : MTS.term -> MTS.term monad
@@ -44,8 +44,6 @@ structure InterpM : sig
   val bequiv : MTS.term -> MTS.term -> unit monad
 
   val field : MTS.path -> (MTS.var * MTS.specification) list -> MTS.specification monad
-  (* val resolvePath : MTS.path -> MTS.specification monad
-  val pathHead : MTS.path -> MTS.var *)
 end
 =
 struct
@@ -154,12 +152,10 @@ struct
     | SpecManifestMod (m, _) => return m
     | _ => throw ()))
 
-  and isSig (SpecAbsMod (ModTypeSig vsl)) = return vsl
-  | isSig (SpecManifestMod (ModTypeSig vsl, _)) = return vsl
+  and isSig (ModTypeSig vsl) = return vsl
   | isSig _ = throw ()
 
-  and isFuncT (SpecAbsMod (ModTypeFunctor (v, m1, m2))) = return (v, m1, m2)
-  | isFuncT (SpecManifestMod (ModTypeFunctor (v, m1, m2), _)) = return (v, m1, m2)
+  and isFuncT (ModTypeFunctor (v, m1, m2)) = return (v, m1, m2)
   | isFuncT _ = throw ()
 
   and isTermTy (SpecAbsTerm m) = return m
@@ -227,24 +223,8 @@ struct
   | field (PVar _) _ = throw ()
   | field (PPath (p, v)) ((x', s)::xs) =
       if eqv v x' then return s
-      else field (PPath (p, v)) (map (fn (x'', s') => (x'', substSpec x'
-        (Path (PPath (p, x'))) s')) xs)
-
-  (* fun pathHead (PVar v) = v
-  | pathHead (PPath (p, _)) = pathHead p
-
-  fun resolvePath (PVar v) = getSpec v
-  | resolvePath (PPath (p, v)) =
-      resolvePath p >>= (fn s =>
-      isSig s >>= (fn s' =>
-      (case List.find (fn (x, _) => eqv v x) s' of
-        SOME (_, s) => return s
-      | NONE => throw ())))
-  | resolvePath (PFunc (p1, p2)) =
-      resolvePath p1 >>= (fn s1 =>
-      isFuncT s1 >>= (fn (v, m1, m2) =>
-      bindAbsMod v m1 (resolvePath p2) >>= (fn _ =>
-        return (SpecAbsMod (substModtype v (Path p2) m2))))) *)
+      else field (PPath (p, v)) (map (fn (x'', s') => (x'', PSub.substSpec x'
+        (PPath (p, x')) s')) xs)
 
 end
 

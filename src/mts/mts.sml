@@ -61,12 +61,20 @@ sig
   type program = (var * toplvl) list
 
   val subst : var -> term -> term -> term
-  val substDef : var -> term -> def -> def
-  val substSpec : var -> term -> specification -> specification
-  val substModtype : var -> term -> modtype -> modtype
-  val substModexpr : var -> term -> modexpr -> modexpr
   val eqv : var -> var -> bool
   val eq : term -> term -> bool
+  structure MSub : sig
+    val substDef : var -> modexpr -> def -> def
+    val substSpec : var -> modexpr -> specification -> specification
+    val substModtype : var -> modexpr -> modtype -> modtype
+    val substModexpr : var -> modexpr -> modexpr -> modexpr
+  end
+  structure PSub : sig
+    val substDef : var -> path -> def -> def
+    val substSpec : var -> path -> specification -> specification
+    val substModtype : var -> path -> modtype -> modtype
+    val substModexpr : var -> path -> modexpr -> modexpr
+  end
 
 end
 =
@@ -151,30 +159,6 @@ struct
       Lambda (v, subst x x' m1, subst x x' m2)
   | subst x x' (DepProduct (v, m1, m2)) =
       DepProduct (v, subst x x' m1, subst x x' m2)
-  and substDef x x' (DefVal m) = DefVal (subst x x' m)
-  | substDef x x' (DefData (m, nml)) =
-      DefData (subst x x' m, map (fn (n, m') => (n, subst x x' m')) nml)
-  | substDef x x' (DefMod m) = DefMod (substModexpr x x' m)
-  | substDef x x' (DefModSig (m1, m2)) =
-      DefModSig (substModexpr x x' m1, substModtype x x' m2)
-  | substDef x x' (DefModTransparent m) = DefModTransparent (substModexpr x x' m)
-  and substSpec x x' (SpecAbsMod m) = SpecAbsMod (substModtype x x' m)
-  | substSpec x x' (SpecManifestMod (m1, m2)) =
-      SpecManifestMod (substModtype x x' m1, substModexpr x x' m2)
-  | substSpec x x' (SpecAbsTerm m) = SpecAbsTerm (subst x x' m)
-  | substSpec x x' (SpecManifestTerm (m1, m2)) =
-      SpecManifestTerm (subst x x' m1, subst x x' m2)
-  and substModtype x x' (ModTypeSig sl) =
-      ModTypeSig (map (fn (v, s) => (v, substSpec x x' s)) sl)
-  | substModtype x x' (ModTypeFunctor (v, m1, m2)) =
-      ModTypeFunctor (v, substModtype x x' m1, substModtype x x' m2)
-  and substModexpr x x' (ModStruct ml) =
-      ModStruct (map (fn (v, d) => (v, substDef x x' d)) ml)
-  | substModexpr x x' (ModFunctor (v, m1, m2)) =
-      ModFunctor (v, substModtype x x' m1, substModexpr x x' m2)
-  | substModexpr x x' (ModApp (m1, m2)) =
-      ModApp (substModexpr x x' m1, substModexpr x x' m2)
-  | substModexpr x x' (ModPath p) = ModPath p
 
   fun eq (Path p) (Path p') = p = p'
   | eq (Lit l) (Lit l') = l = l'
@@ -208,6 +192,101 @@ struct
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
       else eq m1 m1' andalso eq m2 (subst v' (Path (PVar v)) m2')
   | eq _ _ = false
+
+  structure MSub = struct
+    fun substTerm x x' (Path (PVar v)) = Path (PVar v)
+    | substTerm x x' (Path (PPath (p, v))) =
+        Path (PPath (substModexpr x x' p, v))
+    | substTerm x x' (Lit l) = Lit l
+    | substTerm x x' (Sort s) = Sort s
+    | substTerm x x' (App (m1, m2)) =
+        App (substTerm x x' m1, substTerm x x' m2)
+    | substTerm x x' (Case (m1, pml, m2)) = raise Fail ""
+    | substTerm x x' (IfElse (m1, m2, m3)) =
+        IfElse (substTerm x x' m1, substTerm x x' m2, substTerm x x' m3)
+    | substTerm x x' (Let (v, m1, m2, m3)) =
+        Let (v, substTerm x x' m1, substTerm x x' m2, substTerm x x' m3)
+    | substTerm x x' (Lambda (v, m1, m2)) =
+        Lambda (v, substTerm x x' m1, substTerm x x' m2)
+    | substTerm x x' (DepProduct (v, m1, m2)) =
+        DepProduct (v, substTerm x x' m1, substTerm x x' m2)
+    and substDef x x' (DefVal m) = DefVal (substTerm x x' m)
+    | substDef x x' (DefData (m, nml)) =
+        DefData (substTerm x x' m, map (fn (n, m') => (n, substTerm x x' m')) nml)
+    | substDef x x' (DefMod m) = DefMod (substModexpr x x' m)
+    | substDef x x' (DefModSig (m1, m2)) =
+        DefModSig (substModexpr x x' m1, substModtype x x' m2)
+    | substDef x x' (DefModTransparent m) = DefModTransparent (substModexpr x x' m)
+    and substSpec x x' (SpecAbsMod m) = SpecAbsMod (substModtype x x' m)
+    | substSpec x x' (SpecManifestMod (m1, m2)) =
+        SpecManifestMod (substModtype x x' m1,
+        substModexpr x x' m2)
+    | substSpec x x' (SpecAbsTerm m) = SpecAbsTerm (substTerm x x' m)
+    | substSpec x x' (SpecManifestTerm (m1, m2)) =
+        SpecManifestTerm (substTerm x x' m1, substTerm x x' m2)
+    and substModtype x x' (ModTypeSig sl) =
+        ModTypeSig (map (fn (v, s) => (v, substSpec x x' s)) sl)
+    | substModtype x x' (ModTypeFunctor (v, m1, m2)) =
+        ModTypeFunctor (v, substModtype x x' m1, substModtype x x' m2)
+    and substModexpr x x' (ModStruct ml) =
+        ModStruct (map (fn (v, d) => (v, substDef x x' d)) ml)
+    | substModexpr x x' (ModFunctor (v, m1, m2)) =
+        ModFunctor (v, substModtype x x' m1, substModexpr x x' m2)
+    | substModexpr x x' (ModApp (m1, m2)) =
+        ModApp (substModexpr x x' m1, substModexpr x x' m2)
+    | substModexpr x x' (ModPath (PPath (m, v))) =
+        ModPath (PPath (substModexpr x x' m, v))
+    | substModexpr x x' (ModPath (PVar v)) =
+        if x = v then x' else ModPath (PVar v)
+  end
+  structure PSub = struct
+    fun substTerm x x' (Path (PVar v)) =
+        if x = v then Path x' else Path (PVar v)
+    | substTerm x x' (Path (PPath (p, v))) =
+        Path (PPath (substModexpr x x' p, v))
+    | substTerm x x' (Lit l) = Lit l
+    | substTerm x x' (Sort s) = Sort s
+    | substTerm x x' (App (m1, m2)) =
+        App (substTerm x x' m1, substTerm x x' m2)
+    | substTerm x x' (Case (m1, pml, m2)) = raise Fail ""
+    | substTerm x x' (IfElse (m1, m2, m3)) =
+        IfElse (substTerm x x' m1, substTerm x x' m2, substTerm x x' m3)
+    | substTerm x x' (Let (v, m1, m2, m3)) =
+        Let (v, substTerm x x' m1, substTerm x x' m2, substTerm x x' m3)
+    | substTerm x x' (Lambda (v, m1, m2)) =
+        Lambda (v, substTerm x x' m1, substTerm x x' m2)
+    | substTerm x x' (DepProduct (v, m1, m2)) =
+        DepProduct (v, substTerm x x' m1, substTerm x x' m2)
+
+    and substDef x x' (DefVal m) = DefVal (substTerm x x' m)
+    | substDef x x' (DefData (m, nml)) =
+        DefData (substTerm x x' m, map (fn (n, m') => (n, substTerm x x' m')) nml)
+    | substDef x x' (DefMod m) = DefMod (substModexpr x x' m)
+    | substDef x x' (DefModSig (m1, m2)) =
+        DefModSig (substModexpr x x' m1, substModtype x x' m2)
+    | substDef x x' (DefModTransparent m) = DefModTransparent (substModexpr x x' m)
+    and substSpec x x' (SpecAbsMod m) = SpecAbsMod (substModtype x x' m)
+    | substSpec x x' (SpecManifestMod (m1, m2)) =
+        SpecManifestMod (substModtype x x' m1,
+        substModexpr x x' m2)
+    | substSpec x x' (SpecAbsTerm m) = SpecAbsTerm (substTerm x x' m)
+    | substSpec x x' (SpecManifestTerm (m1, m2)) =
+        SpecManifestTerm (substTerm x x' m1, substTerm x x' m2)
+    and substModtype x x' (ModTypeSig sl) =
+        ModTypeSig (map (fn (v, s) => (v, substSpec x x' s)) sl)
+    | substModtype x x' (ModTypeFunctor (v, m1, m2)) =
+        ModTypeFunctor (v, substModtype x x' m1, substModtype x x' m2)
+    and substModexpr x x' (ModStruct ml) =
+        ModStruct (map (fn (v, d) => (v, substDef x x' d)) ml)
+    | substModexpr x x' (ModFunctor (v, m1, m2)) =
+        ModFunctor (v, substModtype x x' m1, substModexpr x x' m2)
+    | substModexpr x x' (ModApp (m1, m2)) =
+        ModApp (substModexpr x x' m1, substModexpr x x' m2)
+    | substModexpr x x' (ModPath (PPath (m, v))) =
+        ModPath (PPath (substModexpr x x' m, v))
+    | substModexpr x x' (ModPath (PVar v)) =
+        if x = v then ModPath x' else ModPath (PVar v)
+  end
 
 end
 

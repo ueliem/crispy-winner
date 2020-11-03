@@ -20,25 +20,18 @@ structure MTSCheck : sig
   val allDiff : MTS.var list -> unit monad
   val wfModtype : MTS.modtype -> unit monad
   val wfSpec : MTS.specification -> unit monad
-  val cModexpr : MTS.modexpr -> MTS.modtype monad
+  val cModexpr : MTS.modexpr -> MTS.modtype -> MTS.modtype monad
   val ptModexpr : MTS.modexpr -> MTS.modtype monad
   val qpModexpr : MTS.modexpr -> MTS.modtype monad
-
-  val cPath : MTS.path -> MTS.specification monad
+  val cPath : MTS.path -> MTS.specification -> MTS.specification monad
   val ptPath : MTS.path -> MTS.specification monad
   val qpPath : MTS.path -> MTS.specification monad
-
-  (* val ptSpec 
-  val qpSpec 
-
-  val cDef d *)
   val qpDef : MTS.def -> MTS.specification monad
-
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
-
   val strSpec : MTS.path -> MTS.specification -> MTS.specification
-  val strModtype : MTS.path -> MTS.modtype -> MTS.modtype
+  val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
+  val strModexpr : MTS.modexpr -> MTS.modexpr -> MTS.modexpr
   
 end
 =
@@ -109,10 +102,10 @@ struct
   fun elmtclass (Path (PVar v)) =
       getTy v >>= (fn m =>
       trimEnv v (sortclass m))
-  | elmtclass (Path p) =
-      resolvePath p >>= (fn s =>
+  | elmtclass (Path p) = raise Fail ""
+      (* resolvePath p >>= (fn s =>
       isTermTy s >>= (fn m =>
-      trimEnv (pathHead p) (sortclass m)))
+      trimEnv (pathHead p) (sortclass m))) *)
   | elmtclass (Lit (IntLit _)) = return TypeVal
   | elmtclass (Lit (IntTyLit)) = return KindVal
   | elmtclass (Lit (BoolLit _)) = return TypeVal
@@ -163,9 +156,9 @@ struct
       whsdcl m >>= (fn m' =>
       isSort m' >>= (fn _ =>
       return m)))
-  | sdcl (Path p) =
-      resolvePath p >>= (fn s =>
-      isTermTy s)
+  | sdcl (Path p) = raise Fail ""
+      (* resolvePath p >>= (fn s =>
+      isTermTy s) *)
   | sdcl (Lit (IntLit _)) = return (Lit (IntTyLit))
   | sdcl (Lit (BoolLit _)) = return (Lit (BoolTyLit))
   | sdcl (Lit (IntTyLit)) = return (Sort TypeVal)
@@ -197,7 +190,6 @@ struct
       sortclass m1 >>= (fn s1 =>
       bindAbsTerm v m1 (whsdcl m2 >>= (fn m2' => isSort m2')) >>= (fn s2 =>
       rho s1 s2 >>= (fn s3 => return (Sort s3))))
-
   and allDiff ([]) = throw ()
   | allDiff (x::xs) =
       let fun f _ ([]) = return ()
@@ -206,7 +198,6 @@ struct
             SOME _ => zero ()
           | NONE => f (y::ys') ys)
       in f [x] xs end
-
   and wfModtype (ModTypeSig sl) =
       let fun wfSigbody ([]) = return ()
       | wfSigbody ((v, s)::sl') = wfSpec s >>= (fn _ =>
@@ -219,14 +210,19 @@ struct
       wfModtype m1 >>= (fn _ => bindAbsMod v m1 (wfModtype m2))
   and wfSpec (SpecAbsMod m) = wfModtype m
   | wfSpec (SpecManifestMod (m1, m2)) =
-      wfModtype m1 >>= (fn _ => cModexpr m2 >>= (fn _ => return ()))
+      wfModtype m1 >>= (fn _ => cModexpr m2 m1 >>= (fn _ => return ()))
   | wfSpec (SpecAbsTerm m) =
       whsdcl m >>= (fn m' => isSort m' >>= (fn _ => return ()))
   | wfSpec (SpecManifestTerm (m1, m2)) =
       whsdcl m2 >>= (fn m2' => bequiv m1 m2')
-
-  and cModexpr m = raise Fail ""
-  and ptModexpr m = raise Fail ""
+  and cModexpr m m' =
+      ptModexpr m >>= (fn m'' =>
+      wfModtype m' >>= (fn _ =>
+      subcModtype m'' m' >>= (fn _ =>
+      return m')))
+  and ptModexpr m =
+      qpModexpr m >>= (fn m' =>
+      return (strModtype m m'))
   and qpModexpr (ModStruct dl) =
       let fun cbody ([]) = return ([])
       | cbody ((v, d)::dl') =
@@ -243,55 +239,46 @@ struct
       return (ModTypeFunctor (v, m1, m2'))))
   | qpModexpr (ModApp (m1, m2)) =
       qpModexpr m1 >>= (fn m1' =>
-      cModexpr m2 >>= (fn m2' =>
       isFuncT m1' >>= (fn (v, m1'', m2'') =>
-      return (substModtype v m2 m2''))))
+      cModexpr m2 m1''>>= (fn m2' =>
+      return (MSub.substModtype v m2 m2''))))
   | qpModexpr (ModPath p) =
       qpPath p >>= (fn s => (case s of
         SpecAbsMod m => return m
       | SpecManifestMod (m, _) => return m
       | _ => throw ()))
-  (* | qpModexpr (ModPath (PPath (p, v))) =
-      qpModexpr p >>= (fn s =>
-      isSig s >>= (fn s' =>
-      raise Fail ""
-      ))
-  | qpModexpr (ModPath p) =
-      resolvePath p >>= (fn s => (case s of
-        SpecAbsMod m => return m
-      | SpecManifestMod (m, _) => return m
-      | _ => throw ())) *)
-
-  and cPath p s = raise Fail ""
-  and ptPath p = raise Fail ""
-  and qpPath (PVar v) =
-      getSpec v >>= (fn _ =>
-      raise Fail "")
+  and cPath p s =
+      wfSpec s >>= (fn _ =>
+      ptPath p >>= (fn s' =>
+      subcSpec s s' >>= (fn _ =>
+      return s)))
+  and ptPath p =
+      qpPath p >>= (fn s =>
+      return (strSpec p s))
+  and qpPath (PVar v) = getSpec v
   | qpPath (PPath (m, v)) =
-      raise Fail ""
-
-  and ptSpec s = raise Fail ""
-  and qpSpec s = raise Fail ""
-
-  and cDef d = raise Fail ""
+      qpModexpr m >>= (fn s =>
+      isSig s >>= (fn s' =>
+      field (PPath (m, v)) s'))
   and qpDef (DefVal m) = raise Fail ""
   | qpDef (DefData (m1, nml)) = raise Fail ""
   | qpDef (DefMod m) = raise Fail ""
   | qpDef (DefModSig (m1, m2)) = raise Fail ""
   | qpDef (DefModTransparent m) = raise Fail ""
-
   and subcModtype m1 m2 = raise Fail ""
   and subcSpec s1 s2 = raise Fail ""
-
-  and strSpec p (SpecAbsMod m) = SpecManifestMod (strModtype p m, ModPath p)
-  | strSpec p (SpecManifestMod (m1, m2)) = SpecManifestMod (m1, m2)
-  | strSpec p (SpecAbsTerm m) = SpecManifestTerm (m, Path p)
-  | strSpec p (SpecManifestTerm (m1, m2)) = SpecManifestTerm (m1, m2)
-
-  and strModtype p (ModTypeSig sl) =
-      ModTypeSig (map (fn (v, s) => (v, strSpec p s)) sl)
-  | strModtype p (ModTypeFunctor (v, m1, m2)) =
-      ModTypeFunctor (v, m1, strModtype (PFunc (p, PVar v)) m2)
+  and strSpec m' (SpecAbsMod m) =
+      SpecManifestMod (strModtype (ModPath m') m, ModPath m')
+  | strSpec m' (SpecManifestMod (m1, m2)) =
+      SpecManifestMod (strModtype (ModPath m') m1, m2)
+  | strSpec m' (SpecAbsTerm m) = SpecManifestTerm (m, Path m')
+  | strSpec m' (SpecManifestTerm (m1, m2)) =
+      SpecManifestTerm (m1, m2)
+  and strModtype m' (ModTypeSig sl) =
+      ModTypeSig (map (fn (v, s) => (v, strSpec (PPath (m', v)) s)) sl)
+  | strModtype m' (ModTypeFunctor (v, m1, m2)) =
+      ModTypeFunctor (v, m1, strModtype (ModApp (m', ModPath (PVar v))) m2)
+  and strModexpr m' _ = raise Fail ""
 
 end
 
