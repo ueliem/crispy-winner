@@ -14,9 +14,11 @@ structure MTSCheck : sig
   val elmtclass : MTS.term -> MTS.sort monad
   val sortclass : MTS.term -> MTS.sort monad
 
+  val strSpec : MTS.path -> MTS.specification -> MTS.specification
+  val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
+  val domain : (MTS.var * MTS.specification) list -> MTS.var list
   val whsdcl : MTS.term -> MTS.term monad
   val sdcl : MTS.term -> MTS.term monad
-
   val allDiff : MTS.var list -> unit monad
   val wfModtype : MTS.modtype -> unit monad
   val wfSpec : MTS.specification -> unit monad
@@ -27,12 +29,10 @@ structure MTSCheck : sig
   val ptPath : MTS.path -> MTS.specification monad
   val qpPath : MTS.path -> MTS.specification monad
   val qpDef : MTS.def -> MTS.specification monad
+  val gammaRestr : MTS.var list -> (MTS.var * MTS.specification) list
+    -> (MTS.var * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
-  val strSpec : MTS.path -> MTS.specification -> MTS.specification
-  val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
-  val strModexpr : MTS.modexpr -> MTS.modexpr -> MTS.modexpr
-  
 end
 =
 struct
@@ -149,6 +149,20 @@ struct
       sortclass m1 >>= (fn s1 =>
       bindAbsTerm v m1 (sortclass m2) >>= (fn s2 => rho s1 s2))
 
+  fun strSpec m' (SpecAbsMod m) =
+      SpecManifestMod (strModtype (ModPath m') m, ModPath m')
+  | strSpec m' (SpecManifestMod (m1, m2)) =
+      SpecManifestMod (strModtype (ModPath m') m1, m2)
+  | strSpec m' (SpecAbsTerm m) = SpecManifestTerm (m, Path m')
+  | strSpec m' (SpecManifestTerm (m1, m2)) =
+      SpecManifestTerm (m1, m2)
+  and strModtype m' (ModTypeSig sl) =
+      ModTypeSig (map (fn (v, s) => (v, strSpec (PPath (m', v)) s)) sl)
+  | strModtype m' (ModTypeFunctor (v, m1, m2)) =
+      ModTypeFunctor (v, m1, strModtype (ModApp (m', ModPath (PVar v))) m2)
+
+  fun domain sl = (#1 (ListPair.unzip sl))
+
   fun whsdcl m =
     sdcl m >>= (fn m' => whreduce m' >>= (fn m'' => return m''))
   and sdcl (Path (PVar v)) =
@@ -203,7 +217,7 @@ struct
       | wfSigbody ((v, s)::sl') = wfSpec s >>= (fn _ =>
           bindSpec v s (wfSigbody sl'))
       in
-        allDiff (#1 (ListPair.unzip sl)) >>= (fn _ =>
+        allDiff (domain sl) >>= (fn _ =>
         wfSigbody sl)
       end
   | wfModtype (ModTypeFunctor (v, m1, m2)) =
@@ -260,25 +274,41 @@ struct
       qpModexpr m >>= (fn s =>
       isSig s >>= (fn s' =>
       field (PPath (m, v)) s'))
-  and qpDef (DefVal m) = raise Fail ""
+  and qpDef (DefVal m) =
+      sdcl m >>= (fn m' => return (SpecManifestTerm (m', m)))
   | qpDef (DefData (m1, nml)) = raise Fail ""
-  | qpDef (DefMod m) = raise Fail ""
-  | qpDef (DefModSig (m1, m2)) = raise Fail ""
-  | qpDef (DefModTransparent m) = raise Fail ""
-  and subcModtype m1 m2 = raise Fail ""
-  and subcSpec s1 s2 = raise Fail ""
-  and strSpec m' (SpecAbsMod m) =
-      SpecManifestMod (strModtype (ModPath m') m, ModPath m')
-  | strSpec m' (SpecManifestMod (m1, m2)) =
-      SpecManifestMod (strModtype (ModPath m') m1, m2)
-  | strSpec m' (SpecAbsTerm m) = SpecManifestTerm (m, Path m')
-  | strSpec m' (SpecManifestTerm (m1, m2)) =
-      SpecManifestTerm (m1, m2)
-  and strModtype m' (ModTypeSig sl) =
-      ModTypeSig (map (fn (v, s) => (v, strSpec (PPath (m', v)) s)) sl)
-  | strModtype m' (ModTypeFunctor (v, m1, m2)) =
-      ModTypeFunctor (v, m1, strModtype (ModApp (m', ModPath (PVar v))) m2)
-  and strModexpr m' _ = raise Fail ""
-
+  | qpDef (DefMod m) =
+      ptModexpr m >>= (fn m' =>
+      return (SpecAbsMod m'))
+  | qpDef (DefModSig (m1, m2)) =
+      cModexpr m1 m2 >>= (fn _ =>
+      return (SpecAbsMod m2))
+  | qpDef (DefModTransparent m) =
+      ptModexpr m >>= (fn m' =>
+      return (SpecManifestMod (m', m)))
+  and gammaRestr dom ([]) = return []
+  | gammaRestr dom ((x, s)::xs) =
+      if List.exists (fn v => eqv v x) dom then
+        cPath (PVar x) s >>= (fn s' =>
+        gammaRestr dom xs >>= (fn xs' =>
+        return ((x, s')::xs')))
+      else throw ()
+  and subcModtype (ModTypeSig sl1) (ModTypeSig sl2) =
+      bindManySpec sl1 (gammaRestr (domain sl1) sl2) >>= (fn _ => return ())
+  | subcModtype (ModTypeFunctor (v1, m1, m2)) (ModTypeFunctor (v2, m1', m2')) =
+      subcModtype m1' m1 >>= (fn _ =>
+      bindAbsMod v1 m1' (subcModtype m2 m2') >>= (fn _ => return ()))
+  | subcModtype _ _ = throw ()
+  and subcSpec s (SpecAbsMod m') =
+      getSpecModtype s >>= (fn s' => subcModtype s' m')
+  | subcSpec (SpecManifestMod (m1, m2)) (SpecManifestMod (m1', m2')) =
+      subcModtype m1 m1' >>= (fn _ => mequiv m2 m2')
+  | subcSpec s (SpecAbsTerm m) =
+      getSpecType s >>= (fn s' =>
+      bequiv s' m)
+  | subcSpec (SpecManifestTerm (m1, m2)) (SpecManifestTerm (m1', m2')) =
+      bequiv m1 m1' >>= (fn _ =>
+      bequiv m2 m2' >>= (fn _ => return ()))
+  | subcSpec _ _ = throw ()
 end
 

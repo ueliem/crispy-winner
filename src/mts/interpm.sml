@@ -18,6 +18,7 @@ structure InterpM : sig
   val bindAbsMod : MTS.var -> MTS.modtype -> 'a monad -> 'a monad
   val bindManifestMod : MTS.var -> MTS.modtype -> MTS.modexpr -> 'a monad -> 'a monad
   val bindSpec : MTS.var -> MTS.specification -> 'a monad -> 'a monad
+  val bindManySpec : (MTS.var * MTS.specification) list -> 'a monad -> 'a monad
 
   val registerSort : MTS.sort -> unit monad
   val registerAxiom : MTS.sort -> MTS.sort -> unit monad
@@ -27,12 +28,18 @@ structure InterpM : sig
   val getAxioms : unit -> MTS.ax monad
   val getRules : unit -> MTS.rules monad
 
-  val getTy : MTS.var -> MTS.term monad
   val getSpec : MTS.var -> MTS.specification monad
+  val getSpecType : MTS.specification -> MTS.term monad
+  val getTy : MTS.var -> MTS.term monad
+  val getSpecModtype : MTS.specification -> MTS.modtype monad
+  val getModtype : MTS.var -> MTS.modtype monad
+  val getDefModexpr : MTS.def -> MTS.modexpr monad
+  val getDefTerm : MTS.def -> MTS.term monad
   val isLambda : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
-  val getModtype : MTS.var -> MTS.modtype monad
+  val isStruct : MTS.modexpr -> (MTS.var * MTS.def) list monad
+  val isFunctor : MTS.modexpr -> (MTS.var * MTS.modtype * MTS.modexpr) monad
   val isSig : MTS.modtype -> (MTS.var * MTS.specification) list monad
   val isFuncT : MTS.modtype -> (MTS.var * MTS.modtype * MTS.modtype) monad
   val isTermTy : MTS.specification -> MTS.term monad
@@ -42,6 +49,12 @@ structure InterpM : sig
   val nfstep : MTS.term -> MTS.term monad
   val nfreduce : MTS.term -> MTS.term monad
   val bequiv : MTS.term -> MTS.term -> unit monad
+
+  val pseudoTModexpr : MTS.modexpr -> MTS.specification monad
+  val pseudoTPath : MTS.path -> MTS.specification monad
+  val mexprstep : MTS.modexpr -> MTS.modexpr monad
+  val mexprreduce : MTS.modexpr -> MTS.modexpr monad
+  val mequiv : MTS.modexpr -> MTS.modexpr -> unit monad
 
   val field : MTS.path -> (MTS.var * MTS.specification) list -> MTS.specification monad
 end
@@ -112,14 +125,9 @@ struct
   fun bindSpec v s =
     loc (fn e => (v, s)::e)
 
-  fun getTy v =
-    ask >>= (fn e =>
-      case List.find (fn (v', x) => v = v') e of
-        SOME (_, SpecAbsMod _) => throw ()
-      | SOME (_, SpecManifestMod _) => throw ()
-      | SOME (_, SpecAbsTerm m) => return m
-      | SOME (_, SpecManifestTerm (m, _)) => return m
-      | NONE => throw ())
+  fun bindManySpec ([]) m = m
+  | bindManySpec ((v, s)::xs) m =
+    (bindSpec v s (bindManySpec xs m))
 
   fun getSpec v =
     ask >>= (fn e =>
@@ -137,6 +145,18 @@ struct
       loc (f [])
     end
 
+  fun getDefModexpr (DefVal m) = throw ()
+  | getDefModexpr (DefData _) = raise Fail ""
+  | getDefModexpr (DefMod m) = return m
+  | getDefModexpr (DefModSig (m1, m2)) = return m1
+  | getDefModexpr (DefModTransparent m) = return m
+
+  fun getDefTerm (DefVal m) = return m
+  | getDefTerm (DefData _) = raise Fail ""
+  | getDefTerm (DefMod m) = throw ()
+  | getDefTerm (DefModSig (m1, m2)) = throw ()
+  | getDefTerm (DefModTransparent m) = throw ()
+
   fun isLambda (Lambda (v, m1, m2)) = return (v, m1, m2)
   | isLambda _ = throw ()
 
@@ -146,11 +166,29 @@ struct
   fun isBoolTy (Lit BoolTyLit) = return ()
   | isBoolTy _ = throw ()
 
-  fun getModtype p =
-    getSpec p >>= (fn s => (case s of
+  and isStruct (ModStruct s) = return s
+  | isStruct _ = throw ()
+
+  and isFunctor (ModFunctor (v, m1, m2)) = return (v, m1, m2)
+  | isFunctor _ = throw ()
+
+  fun getSpecType s =
+    (case s of
+      SpecAbsTerm m => return m
+    | SpecManifestTerm (m, _) => return m
+    | _ => throw ())
+
+  fun getSpecModtype s =
+    (case s of
       SpecAbsMod m => return m
     | SpecManifestMod (m, _) => return m
-    | _ => throw ()))
+    | _ => throw ())
+
+  fun getTy v =
+    getSpec v >>= getSpecType
+
+  fun getModtype p =
+    getSpec p >>= getSpecModtype
 
   and isSig (ModTypeSig vsl) = return vsl
   | isSig _ = throw ()
@@ -225,6 +263,72 @@ struct
       if eqv v x' then return s
       else field (PPath (p, v)) (map (fn (x'', s') => (x'', PSub.substSpec x'
         (PPath (p, x')) s')) xs)
+
+  fun pseudoTModexpr (ModStruct dl) =
+      let
+        fun f ([]) = return []
+        | f ((v, d)::dl') =
+            (case d of
+              DefVal m => return (SpecManifestTerm (m, m))
+            | DefData _ => raise Fail ""
+            | DefMod m => pseudoTModexpr m
+            | DefModSig (m1, m2) => return (SpecAbsMod m2)
+            | DefModTransparent m => return (SpecManifestMod (ModTypeSig [], m))
+            ) >>= (fn s =>
+            bindSpec v s (f dl') >>= (fn sl =>
+            return ((v, s)::sl)))
+      in
+        f dl >>= (fn sl =>
+        return (SpecAbsMod (ModTypeSig sl)))
+      end
+  | pseudoTModexpr (ModFunctor (v, m1, m2)) =
+      bindAbsMod v m1 (pseudoTModexpr m2) >>= (fn s =>
+      getSpecModtype s >>= (fn m2' =>
+      return (SpecAbsMod (ModTypeFunctor (v, m1, m2')))))
+  | pseudoTModexpr (ModApp (m1, m2)) =
+      pseudoTModexpr m1 >>= (fn s =>
+      getSpecModtype s >>= (fn m1' =>
+      isFuncT m1' >>= (fn (v, _, m3) =>
+      return (SpecAbsMod (MSub.substModtype v m2 m3)))))
+  | pseudoTModexpr (ModPath p) = pseudoTPath p
+  and pseudoTPath (PVar v) = getSpec v
+  | pseudoTPath (PPath (p, v)) =
+      pseudoTModexpr p >>= (fn s =>
+      getSpecModtype s >>= (fn s' =>
+      isSig s' >>= (fn s'' =>
+      field (PPath (p, v)) s'')))
+
+  fun mexprstep (ModStruct dl) = throw ()
+  | mexprstep (ModFunctor (v, m1, m2)) = throw ()
+  | mexprstep (ModApp (m1, m2)) =
+      (mexprstep m1 >>= (fn m1' => return (ModApp (m1', m2))))
+      ++ (isFunctor m1 >>= (fn (v, m3, m4) => return (MSub.substModexpr v m2 m4)))
+  | mexprstep (ModPath (PPath (p, v))) =
+      (mexprstep p >>= (fn p' => return (ModPath (PPath (p', v)))))
+      ++ (isStruct p >>= (fn dl =>
+        let
+          fun f _ ([]) = throw ()
+          | f dl'' ((v', d)::dl') =
+              if eqv v v' then return ((v', d), List.rev dl'')
+              else f ((v', d)::dl'') dl'
+        in
+          f [] dl >>= (fn ((v', d), dl') =>
+          getDefModexpr d >>= (fn m =>
+          return (foldl (fn ((v'', _), m') =>
+            PSub.substModexpr v'' (PPath (p, v'')) m') m dl')))
+        end))
+      ++ (pseudoTModexpr p >>= (fn s =>
+        getSpecModtype s >>= (fn s' =>
+        isSig s' >>= (fn s'' =>
+        (case List.find (fn (v', _) => eqv v v') s'' of
+          SOME (_, SpecManifestMod (_, m)) => return m
+        | _ => throw ())))))
+  | mexprstep (ModPath (PVar v)) = throw ()
+
+  fun mexprreduce m =
+    (mexprstep m >>= (fn m' => mexprreduce m')) ++ return m
+
+  fun mequiv m1 m2 = raise Fail ""
 
 end
 
