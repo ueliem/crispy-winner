@@ -18,7 +18,7 @@ structure InterpM : sig
   val bindAbsMod : MTS.var -> MTS.modtype -> 'a monad -> 'a monad
   val bindManifestMod : MTS.var -> MTS.modtype -> MTS.modexpr -> 'a monad -> 'a monad
   val bindSpec : MTS.var -> MTS.specification -> 'a monad -> 'a monad
-  val bindManySpec : (MTS.var * MTS.specification) list -> 'a monad -> 'a monad
+  val bindManySpec : ((MTS.var * MTS.var) * MTS.specification) list -> 'a monad -> 'a monad
 
   val registerSort : MTS.sort -> unit monad
   val registerAxiom : MTS.sort -> MTS.sort -> unit monad
@@ -38,9 +38,10 @@ structure InterpM : sig
   val isLambda : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
-  val isStruct : MTS.modexpr -> (MTS.var * MTS.def) list monad
+  val isStruct : MTS.modexpr -> ((MTS.var * MTS.var) * MTS.def) list monad
   val isFunctor : MTS.modexpr -> (MTS.var * MTS.modtype * MTS.modexpr) monad
-  val isSig : MTS.modtype -> (MTS.var * MTS.specification) list monad
+  val isSig : MTS.modtype
+    -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val isFuncT : MTS.modtype -> (MTS.var * MTS.modtype * MTS.modtype) monad
   val isTermTy : MTS.specification -> MTS.term monad
 
@@ -56,7 +57,8 @@ structure InterpM : sig
   val mexprreduce : MTS.modexpr -> MTS.modexpr monad
   val mequiv : MTS.modexpr -> MTS.modexpr -> unit monad
 
-  val field : MTS.path -> (MTS.var * MTS.specification) list -> MTS.specification monad
+  val field : MTS.path -> ((MTS.var * MTS.var) * MTS.specification) list
+    -> MTS.specification monad
 end
 =
 struct
@@ -126,7 +128,7 @@ struct
     loc (fn e => (v, s)::e)
 
   fun bindManySpec ([]) m = m
-  | bindManySpec ((v, s)::xs) m =
+  | bindManySpec (((v, v'), s)::xs) m =
     (bindSpec v s (bindManySpec xs m))
 
   fun getSpec v =
@@ -259,15 +261,16 @@ struct
 
   fun field _ ([]) = throw ()
   | field (PVar _) _ = throw ()
-  | field (PPath (p, v)) ((x', s)::xs) =
+  | field (PPath (p, v)) (((x', _), s)::xs) =
       if eqv v x' then return s
-      else field (PPath (p, v)) (map (fn (x'', s') => (x'', PSub.substSpec x'
-        (PPath (p, x')) s')) xs)
+      else field (PPath (p, v))
+        (map (fn ((x'', x'''), s') => ((x'', x'''), PSub.substSpec x'
+          (PPath (p, x')) s')) xs)
 
   fun pseudoTModexpr (ModStruct dl) =
       let
         fun f ([]) = return []
-        | f ((v, d)::dl') =
+        | f (((v1, v2), d)::dl') =
             (case d of
               DefVal m => return (SpecManifestTerm (m, m))
             | DefData _ => raise Fail ""
@@ -275,8 +278,8 @@ struct
             | DefModSig (m1, m2) => return (SpecAbsMod m2)
             | DefModTransparent m => return (SpecManifestMod (ModTypeSig [], m))
             ) >>= (fn s =>
-            bindSpec v s (f dl') >>= (fn sl =>
-            return ((v, s)::sl)))
+            bindSpec v2 s (f dl') >>= (fn sl =>
+            return (((v1, v2), s)::sl)))
       in
         f dl >>= (fn sl =>
         return (SpecAbsMod (ModTypeSig sl)))
@@ -308,27 +311,31 @@ struct
       ++ (isStruct p >>= (fn dl =>
         let
           fun f _ ([]) = throw ()
-          | f dl'' ((v', d)::dl') =
-              if eqv v v' then return ((v', d), List.rev dl'')
-              else f ((v', d)::dl'') dl'
+          | f dl'' (((v', v''), d)::dl') =
+              if eqv v v' then return (((v', v''), d), List.rev dl'')
+              else f (((v', v''), d)::dl'') dl'
         in
-          f [] dl >>= (fn ((v', d), dl') =>
+          f [] dl >>= (fn (((v', v''), d), dl') =>
           getDefModexpr d >>= (fn m =>
-          return (foldl (fn ((v'', _), m') =>
-            PSub.substModexpr v'' (PPath (p, v'')) m') m dl')))
+          return (foldl (fn (((_, v'''), _), m') =>
+            PSub.substModexpr v''' (PPath (p, v''')) m') m dl')))
         end))
       ++ (pseudoTModexpr p >>= (fn s =>
         getSpecModtype s >>= (fn s' =>
         isSig s' >>= (fn s'' =>
-        (case List.find (fn (v', _) => eqv v v') s'' of
-          SOME (_, SpecManifestMod (_, m)) => return m
+        (case List.find (fn ((v', _), _) => eqv v v') s'' of
+          SOME ((_, _), SpecManifestMod (_, m)) => return m
         | _ => throw ())))))
   | mexprstep (ModPath (PVar v)) = throw ()
 
   fun mexprreduce m =
     (mexprstep m >>= (fn m' => mexprreduce m')) ++ return m
 
-  fun mequiv m1 m2 = raise Fail ""
+  fun mequiv m1 m2 =
+    mexprreduce m1 >>= (fn m1' =>
+    mexprreduce m2 >>= (fn m2' =>
+      if mexpreq m1' m2' then return ()
+      else throw ()))
 
 end
 

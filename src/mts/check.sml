@@ -16,7 +16,8 @@ structure MTSCheck : sig
 
   val strSpec : MTS.path -> MTS.specification -> MTS.specification
   val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
-  val domain : (MTS.var * MTS.specification) list -> MTS.var list
+  val domain : ((MTS.var * MTS.var) * MTS.specification) list
+    -> MTS.var list
   val whsdcl : MTS.term -> MTS.term monad
   val sdcl : MTS.term -> MTS.term monad
   val allDiff : MTS.var list -> unit monad
@@ -29,8 +30,8 @@ structure MTSCheck : sig
   val ptPath : MTS.path -> MTS.specification monad
   val qpPath : MTS.path -> MTS.specification monad
   val qpDef : MTS.def -> MTS.specification monad
-  val gammaRestr : MTS.var list -> (MTS.var * MTS.specification) list
-    -> (MTS.var * MTS.specification) list monad
+  val gammaRestr : MTS.var list -> ((MTS.var * MTS.var) * MTS.specification) list
+    -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
 end
@@ -76,25 +77,25 @@ struct
       | NONE => throw ()))
 
   fun plus s1 =
-    getstate >>= (fn (srts, axs, rls) =>
+    getAxioms () >>= (fn axs =>
       (case List.find (fn (s1', s2) => s1 = s1') axs of
         SOME (s1, s2) => return s2
       | NONE => zero ()))
 
   fun minus s2 =
-    getstate >>= (fn (srts, axs, rls) =>
+    getAxioms () >>= (fn axs =>
       (case List.find (fn (s1, s2') => s2 = s2') axs of
         SOME (s1, s2) => return s1
       | NONE => throw ()))
 
   fun rho s1 s2 =
-    getstate >>= (fn (srts, axs, rls) =>
+    getRules () >>= (fn rls =>
       (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
       | NONE => throw ()))
 
   fun mu s1 s2 =
-    getstate >>= (fn (srts, axs, rls) =>
+    getRules () >>= (fn rls =>
       (case List.find (fn (s1', s3, s2') => s1 = s1' andalso s2 = s2') rls of
         SOME (_, s3, _) => return s3
       | NONE => throw ()))
@@ -157,11 +158,12 @@ struct
   | strSpec m' (SpecManifestTerm (m1, m2)) =
       SpecManifestTerm (m1, m2)
   and strModtype m' (ModTypeSig sl) =
-      ModTypeSig (map (fn (v, s) => (v, strSpec (PPath (m', v)) s)) sl)
+      ModTypeSig (map (fn ((v, v'), s) =>
+        ((v, v'), strSpec (PPath (m', v)) s)) sl)
   | strModtype m' (ModTypeFunctor (v, m1, m2)) =
       ModTypeFunctor (v, m1, strModtype (ModApp (m', ModPath (PVar v))) m2)
 
-  fun domain sl = (#1 (ListPair.unzip sl))
+  fun domain sl = (#1 (ListPair.unzip (#1 (ListPair.unzip sl))))
 
   fun whsdcl m =
     sdcl m >>= (fn m' => whreduce m' >>= (fn m'' => return m''))
@@ -214,7 +216,7 @@ struct
       in f [x] xs end
   and wfModtype (ModTypeSig sl) =
       let fun wfSigbody ([]) = return ()
-      | wfSigbody ((v, s)::sl') = wfSpec s >>= (fn _ =>
+      | wfSigbody (((v, v'), s)::sl') = wfSpec s >>= (fn _ =>
           bindSpec v s (wfSigbody sl'))
       in
         allDiff (domain sl) >>= (fn _ =>
@@ -239,12 +241,12 @@ struct
       return (strModtype m m'))
   and qpModexpr (ModStruct dl) =
       let fun cbody ([]) = return ([])
-      | cbody ((v, d)::dl') =
+      | cbody (((v, v'), d)::dl') =
           qpDef d >>= (fn s =>
           bindSpec v s (cbody dl') >>= (fn sl =>
-          return ((v, s)::sl)))
+          return (((v, v'), s)::sl)))
       in
-        allDiff (#1 (ListPair.unzip dl)) >>= (fn _ =>
+        allDiff (domain dl) >>= (fn _ =>
         cbody dl >>= (fn vsl => return (ModTypeSig vsl)))
       end
   | qpModexpr (ModFunctor (v, m1, m2)) =
@@ -287,11 +289,11 @@ struct
       ptModexpr m >>= (fn m' =>
       return (SpecManifestMod (m', m)))
   and gammaRestr dom ([]) = return []
-  | gammaRestr dom ((x, s)::xs) =
+  | gammaRestr dom (((x, x'), s)::xs) =
       if List.exists (fn v => eqv v x) dom then
         cPath (PVar x) s >>= (fn s' =>
         gammaRestr dom xs >>= (fn xs' =>
-        return ((x, s')::xs')))
+        return (((x, x'), s')::xs')))
       else throw ()
   and subcModtype (ModTypeSig sl1) (ModTypeSig sl2) =
       bindManySpec sl1 (gammaRestr (domain sl1) sl2) >>= (fn _ => return ())
