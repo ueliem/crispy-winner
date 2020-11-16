@@ -148,13 +148,13 @@ struct
     end
 
   fun getDefModexpr (DefVal m) = throw ()
-  | getDefModexpr (DefData _) = raise Fail ""
+  | getDefModexpr (DefData _) = throw ()
   | getDefModexpr (DefMod m) = return m
   | getDefModexpr (DefModSig (m1, m2)) = return m1
   | getDefModexpr (DefModTransparent m) = return m
 
   fun getDefTerm (DefVal m) = return m
-  | getDefTerm (DefData _) = raise Fail ""
+  | getDefTerm (DefData _) = throw ()
   | getDefTerm (DefMod m) = throw ()
   | getDefTerm (DefModSig (m1, m2)) = throw ()
   | getDefTerm (DefModTransparent m) = throw ()
@@ -209,7 +209,7 @@ struct
       (nfstep m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (App (m1, m2'))))
       ++ (isLambda m1 >>= (fn (v, m3, m4) => return (subst v m2 m4)))
-  | nfstep (Case (m1, pml, m2)) = raise Fail ""
+  | nfstep (Case (m1, pml)) = raise Fail ""
   | nfstep (IfElse (m1, m2, m3)) =
       (nfstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
       ++ (nfstep m2 >>= (fn m2' => return (IfElse (m1, m2', m3))))
@@ -234,7 +234,7 @@ struct
   | whstep (App (m1, m2)) =
       (whstep m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (isLambda m1 >>= (fn (v, m3, m4) => return (subst v m2 m4)))
-  | whstep (Case (m1, pml, m2)) = raise Fail ""
+  | whstep (Case (m1, pml)) = raise Fail ""
   | whstep (IfElse (m1, m2, m3)) =
       (whstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
       ++ (whstep m2 >>= (fn m2' => return (IfElse (m1, m2', m3))))
@@ -256,7 +256,7 @@ struct
   fun bequiv m1 m2 =
     nfreduce m1 >>= (fn m1' =>
     nfreduce m2 >>= (fn m2' =>
-      if eq m1' m2' then return ()
+      if Equiv.eq m1' m2' then return ()
       else throw ()))
 
   fun field _ ([]) = throw ()
@@ -334,7 +334,7 @@ struct
   fun mequiv m1 m2 =
     mexprreduce m1 >>= (fn m1' =>
     mexprreduce m2 >>= (fn m2' =>
-      if mexpreq m1' m2' then return ()
+      if Equiv.mexpreq m1' m2' then return ()
       else throw ()))
 
 end

@@ -116,7 +116,7 @@ struct
   | elmtclass (App (m1, m2)) =
       elmtclass m1 >>= (fn s1 =>
       elmtclass m2 >>= (fn s2 => mu s1 s2))
-  | elmtclass (Case (m1, pml, m2)) = raise Fail ""
+  | elmtclass (Case (m1, pml)) = raise Fail ""
   | elmtclass (IfElse (m1, m2, m3)) =
       elmtclass m2 >>= (fn s2 =>
       elmtclass m3 >>= (fn s3 =>
@@ -137,7 +137,7 @@ struct
   | sortclass (Lit (BoolTyLit)) = return TypeVal
   | sortclass (Sort s) = plus s
   | sortclass (App (m1, m2)) = elmtclass (App (m1, m2)) >>= minus
-  | sortclass (Case (m1, pml, m2)) = raise Fail ""
+  | sortclass (Case (m1, pml)) = raise Fail ""
   | sortclass (IfElse (m1, m2, m3)) =
       sortclass m2 >>= (fn s2 =>
       sortclass m3 >>= (fn s3 =>
@@ -184,7 +184,7 @@ struct
       whsdcl m1 >>= (fn m1' =>
       sdcl m2 >>= (fn m2' =>
       isDepProduct m2' >>= (fn (v, m1'', m2'') => return (subst v m2 m2''))))
-  | sdcl (Case (m1, pml, m2)) = raise Fail ""
+  | sdcl (Case (m1, pml)) = raise Fail ""
   | sdcl (IfElse (m1, m2, m3)) =
       sdcl m1 >>= (fn m1' =>
       whsdcl m2 >>= (fn m2' =>
