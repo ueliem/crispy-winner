@@ -100,10 +100,18 @@ struct
         SOME (_, s3, _) => return s3
       | NONE => throw ()))
 
-  fun elmtclass (Path (PVar v)) =
+  fun getArgTypes ([]) _ = return []
+  | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
+      getArgTypes xs m2 >>= (fn m2' => return (m1::m2'))
+  | getArgTypes (x::xs) _ = throw ()
+
+  (* fun elmtclass (Path (PVar v)) =
       getTy v >>= (fn m =>
-      trimEnv v (sortclass m))
-  | elmtclass (Path p) = raise Fail ""
+      trimEnv v (sortclass m)) *)
+  fun elmtclass (Path p) =
+      pseudoTPath p >>= (fn s =>
+      getSpecType s >>= (fn s' =>
+      (sortclass s')))
       (* resolvePath p >>= (fn s =>
       isTermTy s >>= (fn m =>
       trimEnv (pathHead p) (sortclass m))) *)
@@ -129,8 +137,8 @@ struct
   | elmtclass (DepProduct (v, m1, m2)) =
       sortclass (DepProduct (v, m1, m2)) >>= plus
 
-  and sortclass (Path (PVar v)) = elmtclass (Path (PVar v)) >>= minus
-  | sortclass (Path p) = elmtclass (Path p) >>= minus
+  (* and sortclass (Path (PVar v)) = elmtclass (Path (PVar v)) >>= minus *)
+  and sortclass (Path p) = elmtclass (Path p) >>= minus
   | sortclass (Lit (IntLit _)) = zero ()
   | sortclass (Lit (IntTyLit)) = return TypeVal
   | sortclass (Lit (BoolLit _)) = zero ()
@@ -167,14 +175,7 @@ struct
 
   fun whsdcl m =
     sdcl m >>= (fn m' => whreduce m' >>= (fn m'' => return m''))
-  and sdcl (Path (PVar v)) =
-      getTy v >>= (fn m =>
-      whsdcl m >>= (fn m' =>
-      isSort m' >>= (fn _ =>
-      return m)))
-  | sdcl (Path p) = raise Fail ""
-      (* resolvePath p >>= (fn s =>
-      isTermTy s) *)
+  and sdcl (Path p) = ptPath p >>= (fn s => getSpecType s)
   | sdcl (Lit (IntLit _)) = return (Lit (IntTyLit))
   | sdcl (Lit (BoolLit _)) = return (Lit (BoolTyLit))
   | sdcl (Lit (IntTyLit)) = return (Sort TypeVal)
@@ -183,7 +184,8 @@ struct
   | sdcl (App (m1, m2)) =
       whsdcl m1 >>= (fn m1' =>
       sdcl m2 >>= (fn m2' =>
-      isDepProduct m2' >>= (fn (v, m1'', m2'') => return (subst v m2 m2''))))
+      isDepProduct m2' >>= (fn (v, m1'', m2'') =>
+      return (subst v m2 m2''))))
   | sdcl (Case (m1, pml)) = raise Fail ""
   | sdcl (IfElse (m1, m2, m3)) =
       sdcl m1 >>= (fn m1' =>
@@ -259,10 +261,7 @@ struct
       cModexpr m2 m1''>>= (fn m2' =>
       return (MSub.substModtype v m2 m2''))))
   | qpModexpr (ModPath p) =
-      qpPath p >>= (fn s => (case s of
-        SpecAbsMod m => return m
-      | SpecManifestMod (m, _) => return m
-      | _ => throw ()))
+      qpPath p >>= (fn s => getSpecModtype s)
   and cPath p s =
       wfSpec s >>= (fn _ =>
       ptPath p >>= (fn s' =>
@@ -306,11 +305,34 @@ struct
   | subcSpec (SpecManifestMod (m1, m2)) (SpecManifestMod (m1', m2')) =
       subcModtype m1 m1' >>= (fn _ => mequiv m2 m2')
   | subcSpec s (SpecAbsTerm m) =
-      getSpecType s >>= (fn s' =>
-      bequiv s' m)
+      getSpecType s >>= (fn s' => bequiv s' m)
   | subcSpec (SpecManifestTerm (m1, m2)) (SpecManifestTerm (m1', m2')) =
       bequiv m1 m1' >>= (fn _ =>
       bequiv m2 m2' >>= (fn _ => return ()))
   | subcSpec _ _ = throw ()
+  and cTerm t1 t2 =
+    ptTerm t1 >>= (fn t1' =>
+    whptTerm t2 >>= (fn t2' =>
+    isSort t2' >>= (fn _ =>
+    bequiv t2 t1')))
+  and ptTerm (Path p) = qpPath p >>= (fn s => getSpecType s)
+  | ptTerm (Lit (IntLit _)) = return (Lit (IntTyLit))
+  | ptTerm (Lit (BoolLit _)) = return (Lit (BoolTyLit))
+  | ptTerm (Lit (IntTyLit)) = return (Sort TypeVal)
+  | ptTerm (Lit (BoolTyLit)) = return (Sort TypeVal)
+  | ptTerm (Sort s) = hasAxiom s >>= (fn s' => return (Sort s'))
+  | ptTerm (App (t1, t2)) =
+      whptTerm t1 >>= (fn t1' =>
+      isDepProduct t1' >>= (fn (v, t3, t4) =>
+      cTerm t2 t3 >>= (fn _ =>
+      return (TSub.substTerm v t2 t4))))
+  | ptTerm (Case (t1, pml)) = raise Fail ""
+  | ptTerm (IfElse (t1, t2, m3)) = raise Fail ""
+  | ptTerm (Let (v, t1, t2, m3)) = raise Fail ""
+  | ptTerm (Lambda (v, t1, t2)) = raise Fail ""
+  | ptTerm (DepProduct (v, t1, t2)) = raise Fail ""
+  and whptTerm t =
+    ptTerm t >>= (fn t' => whreduce t' >>= (fn t'' => return t''))
+
 end
 

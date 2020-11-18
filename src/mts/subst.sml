@@ -4,6 +4,7 @@ functor SUBST (structure S : sig
   val replaceVModexpr : MTS.var -> r -> MTS.modexpr
 end) : sig
   type r
+  val substTerm : MTS.var -> r -> MTS.term -> MTS.term
   val substDef : MTS.var -> r -> MTS.def -> MTS.def
   val substSpec : MTS.var -> r -> MTS.specification -> MTS.specification
   val substModtype : MTS.var -> r -> MTS.modtype -> MTS.modtype
@@ -38,7 +39,14 @@ struct
       if eqv x v then DepProduct (v, m1, m2)
       else DepProduct (v, substTerm x x' m1, substTerm x x' m2)
   and substDef x x' (DefVal m) = DefVal (substTerm x x' m)
-  | substDef x x' (DefData (m, nml)) = raise Fail ""
+  | substDef x x' (DefData (m, nml)) =
+    let fun f tl'' ([]) = List.rev tl''
+      | f tl'' (((v1, v2), t)::tl') =
+          if eqv x v2 then
+            (List.rev tl'') @ (((v1, v2), t)::tl')
+          else
+            f (((v1, v2), substTerm x x' t)::tl'') tl'
+    in DefData (substTerm x x' m, f [] nml) end
       (* DefData (substTerm x x' m, map (fn (n, m') => (n, substTerm x x' m')) nml) *)
   | substDef x x' (DefMod m) = DefMod (substModexpr x x' m)
   | substDef x x' (DefModSig (m1, m2)) =

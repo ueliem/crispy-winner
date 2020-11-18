@@ -43,8 +43,10 @@ struct
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
       else eq m1 m1' andalso eq m2 (subst v' (Path (PVar v)) m2')
   | eq _ _ = false
-
-  and mexpreq (ModStruct ml) (ModStruct ml') = raise Fail ""
+  and mexpreq (ModStruct ml) (ModStruct ml') =
+      foldl (fn ((((v1, v2), d), ((v1', v2'), d')), x) => 
+        x andalso eqv v2 v2' andalso defeq d d')
+        true (ListPair.zipEq (ml, ml'))
   | mexpreq (ModFunctor (v, m1, m2)) (ModFunctor (v', m1', m2')) =
       if eqv v v' then mtypeeq m1 m1' andalso mexpreq m2 m2'
       else mtypeeq m1 m1' andalso mexpreq m2 (PSub.substModexpr v' (PVar v) m2')
@@ -54,9 +56,30 @@ struct
       mexpreq m m' andalso eqv v v'
   | mexpreq (ModPath (PVar v)) (ModPath (PVar v')) = eqv v v'
   | mexpreq _ _ = false
-  and mtypeeq (ModTypeSig sl) (ModTypeSig sl') = false
+  and mtypeeq (ModTypeSig sl) (ModTypeSig sl') =
+      foldl (fn ((((v1, v2), s), ((v1', v2'), s')), x) => 
+        x andalso eqv v2 v2' andalso speceq s s')
+        true (ListPair.zipEq (sl, sl'))
   | mtypeeq (ModTypeFunctor (v, m1, m2)) (ModTypeFunctor (v', m1', m2')) =
       if eqv v v' then mtypeeq m1 m1' andalso mtypeeq m2 m2'
       else mtypeeq m1 m1' andalso mtypeeq m2 (PSub.substModtype v' (PVar v) m2')
+  | mtypeeq _ _ = false
+  and speceq (SpecAbsMod m) (SpecAbsMod m') = mtypeeq m m'
+  | speceq (SpecManifestMod (m1, m2)) (SpecManifestMod (m1', m2')) =
+      mtypeeq m1 m1' andalso mexpreq m2 m2'
+  | speceq (SpecAbsTerm m) (SpecAbsTerm m') = eq m m'
+  | speceq (SpecManifestTerm (m1, m2)) (SpecManifestTerm (m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
+  | speceq _ _ = false
+  and defeq (DefVal m) (DefVal m') = eq m m'
+  | defeq (DefData (m, nml)) (DefData (m', nml')) =
+      foldl (fn ((((v1, v2), t), ((v1', v2'), t')), x) => 
+        x andalso eqv v2 v2' andalso eq t t')
+        true (ListPair.zipEq (nml, nml'))
+
+  | defeq (DefModSig (m1, m2)) (DefModSig (m1', m2')) =
+      mexpreq m1 m1' andalso mtypeeq m2 m2'
+  | defeq (DefModTransparent m) (DefModTransparent m') = mexpreq m m'
+  | defeq _ _ = false
 
 end
