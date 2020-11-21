@@ -98,7 +98,7 @@ end)
 
 structure MSub = SUBST (structure S = struct
   type r = MTS.modexpr
-  fun replaceVTerm v m = raise Fail ""
+  fun replaceVTerm v m = raise Fail "cannot substitute modexpr for var in term"
   fun replaceVModexpr v m = m
 end)
 
@@ -111,6 +111,6 @@ end)
 structure TSub = SUBST (structure S = struct
   type r = MTS.term
   fun replaceVTerm v t = t
-  fun replaceVModexpr v t = raise Fail ""
+  fun replaceVModexpr v t = raise Fail "cannot substitute term for var in modexpr"
 end)
 

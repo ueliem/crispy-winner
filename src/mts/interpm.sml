@@ -129,7 +129,7 @@ struct
 
   fun bindManySpec ([]) m = m
   | bindManySpec (((v, v'), s)::xs) m =
-    (bindSpec v s (bindManySpec xs m))
+    (bindSpec v' s (bindManySpec xs m))
 
   fun getSpec v =
     ask >>= (fn e =>
@@ -208,7 +208,7 @@ struct
   | nfstep (App (m1, m2)) =
       (nfstep m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (App (m1, m2'))))
-      ++ (isLambda m1 >>= (fn (v, m3, m4) => return (subst v m2 m4)))
+      ++ (isLambda m1 >>= (fn (v, m3, m4) => return (TSub.substTerm v m2 m4)))
   | nfstep (Case (m1, pml)) = raise Fail ""
   | nfstep (IfElse (m1, m2, m3)) =
       (nfstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
@@ -233,8 +233,10 @@ struct
   | whstep (Sort _) = zero ()
   | whstep (App (m1, m2)) =
       (whstep m1 >>= (fn m1' => return (App (m1', m2))))
-      ++ (isLambda m1 >>= (fn (v, m3, m4) => return (subst v m2 m4)))
-  | whstep (Case (m1, pml)) = raise Fail ""
+      ++ (isLambda m1 >>= (fn (v, m3, m4) => return (TSub.substTerm v m2 m4)))
+  | whstep (Case (m, pml)) =
+      (whstep m >>= (fn m' => return (Case (m', pml))))
+      ++ (return (raise Fail ""))
   | whstep (IfElse (m1, m2, m3)) =
       (whstep m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
       ++ (whstep m2 >>= (fn m2' => return (IfElse (m1, m2', m3))))
@@ -272,14 +274,17 @@ struct
         fun f ([]) = return []
         | f (((v1, v2), d)::dl') =
             (case d of
-              DefVal m => return (SpecManifestTerm (m, m))
-            | DefData _ => raise Fail ""
-            | DefMod m => pseudoTModexpr m
-            | DefModSig (m1, m2) => return (SpecAbsMod m2)
-            | DefModTransparent m => return (SpecManifestMod (ModTypeSig [], m))
-            ) >>= (fn s =>
-            bindSpec v2 s (f dl') >>= (fn sl =>
-            return (((v1, v2), s)::sl)))
+              DefVal m => return [((v1, v2), SpecManifestTerm (m, m))]
+            | DefData (m, vml) =>
+                return (map (fn ((v1, v2), m') =>
+                  ((v1, v2), SpecAbsTerm m')) (((v1, v2), m)::vml))
+            | DefMod m => pseudoTModexpr m >>= (fn m' => return [((v1, v2), m')])
+            | DefModSig (m1, m2) => return [((v1, v2), SpecAbsMod m2)]
+            | DefModTransparent m =>
+                return [((v1, v2), SpecManifestMod (ModTypeSig [], m))]
+            ) >>= (fn vsl =>
+            bindManySpec vsl (f dl') >>= (fn sl =>
+            return (vsl @ sl)))
       in
         f dl >>= (fn sl =>
         return (SpecAbsMod (ModTypeSig sl)))

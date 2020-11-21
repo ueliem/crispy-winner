@@ -26,7 +26,7 @@ sig
   | Lit of lit
   | Sort of sort
   | App of term * term
-  | Case of term * (var * var list * term) list
+  | Case of term * (path * var list * term) list
   | IfElse of term * term * term
   | Let of var * term * term * term
   | Lambda of var * term * term
@@ -54,8 +54,6 @@ sig
     TopSpec of specification
   | TopDef of def
   type program = (var * toplvl) list
-
-  val subst : var -> term -> term -> term
 
   val eqv : var -> var -> bool
   val eqvs : var list -> var list -> bool
@@ -88,7 +86,7 @@ struct
   | Lit of lit
   | Sort of sort
   | App of term * term
-  | Case of term * (var * var list * term) list
+  | Case of term * (path * var list * term) list
   | IfElse of term * term * term
   | Let of var * term * term * term
   | Lambda of var * term * term
@@ -125,28 +123,6 @@ struct
     let fun f ([]) = true
     | f ((x, x')::xs) = eqv x x' andalso f xs
     in f (ListPair.zipEq (vs, vs')) end
-
-  fun subst x x' (Path (PVar v)) =
-    if eqv x v then x' else Path (PVar v)
-  | subst x x' (Path p) = Path p
-  | subst x x' (Lit l) = Lit l
-  | subst x x' (Sort s) = Sort s
-  | subst x x' (App (m1, m2)) =
-      App (subst x x' m1, subst x x' m2)
-  | subst x x' (Case (m, pml)) =
-      Case (subst x x' m, map (fn (c, vs, m') =>
-        (c, vs, subst x x' m')) pml)
-  | subst x x' (IfElse (m1, m2, m3)) =
-      IfElse (subst x x' m1, subst x x' m2, subst x x' m3)
-  | subst x x' (Let (v, m1, m2, m3)) =
-      if eqv x v then (Let (v, m1, m2, m3)) 
-      else Let (v, subst x x' m1, subst x x' m2, subst x x' m3)
-  | subst x x' (Lambda (v, m1, m2)) =
-      if eqv x v then (Lambda (v, m1, m2))
-      else Lambda (v, subst x x' m1, subst x x' m2)
-  | subst x x' (DepProduct (v, m1, m2)) =
-      if eqv x v then (DepProduct (v, m1, m2))
-      else DepProduct (v, subst x x' m1, subst x x' m2)
 
 end
 
