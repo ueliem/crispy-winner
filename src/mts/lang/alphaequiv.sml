@@ -10,8 +10,7 @@ struct
   fun eq (Path p) (Path p') = patheq p p'
   | eq (Lit l) (Lit l') = l = l'
   | eq (Sort s) (Sort s') = s = s'
-  | eq (App (m1, m2)) (App (m1', m2')) =
-      eq m1 m1' andalso eq m2 m2'
+  | eq (App (m1, m2)) (App (m1', m2')) = eq m1 m1' andalso eq m2 m2'
   | eq (Case (m, pml)) (Case (m', pml')) =
       eq m m' andalso foldl (fn (((c, vs, m1), (c', vs', m1')), x) => 
         x andalso patheq c c' andalso eqvs vs vs' andalso eq m1 m1')

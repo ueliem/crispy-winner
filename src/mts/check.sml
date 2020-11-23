@@ -6,11 +6,7 @@ structure MTSCheck : sig
   val hasAxiom : MTS.sort -> MTS.sort monad
   val hasRule : MTS.sort -> MTS.sort -> MTS.sort monad
   val startsRule : MTS.sort -> unit monad
-
-  val plus : MTS.sort -> MTS.sort monad
-  val minus : MTS.sort -> MTS.sort monad
   val rho : MTS.sort -> MTS.sort -> MTS.sort monad
-  val mu : MTS.sort -> MTS.sort -> MTS.sort monad
 
   val strSpec : MTS.path -> MTS.specification -> MTS.specification
   val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
@@ -29,10 +25,15 @@ structure MTSCheck : sig
     -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
+  (* val leftmost : MTS.term -> MTS.var monad
+  val collectArgs : MTS.term -> MTS.term list monad
+  val wfTCType : MTS.term -> unit monad
+  val wfDCType : MTS.term -> unit monad *)
 end
 =
 struct
   open InterpM
+  open InterpMTSUtil
   open MTS
 
   fun isSort (Sort s) =
@@ -71,34 +72,11 @@ struct
         SOME (s1, s2, s3) => return ()
       | NONE => throw ()))
 
-  fun plus s1 =
-    getAxioms () >>= (fn axs =>
-      (case List.find (fn (s1', s2) => s1 = s1') axs of
-        SOME (s1, s2) => return s2
-      | NONE => zero ()))
-
-  fun minus s2 =
-    getAxioms () >>= (fn axs =>
-      (case List.find (fn (s1, s2') => s2 = s2') axs of
-        SOME (s1, s2) => return s1
-      | NONE => throw ()))
-
   fun rho s1 s2 =
     getRules () >>= (fn rls =>
       (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
       | NONE => throw ()))
-
-  fun mu s1 s2 =
-    getRules () >>= (fn rls =>
-      (case List.find (fn (s1', s3, s2') => s1 = s1' andalso s2 = s2') rls of
-        SOME (_, s3, _) => return s3
-      | NONE => throw ()))
-
-  fun getArgTypes ([]) _ = return []
-  | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
-      getArgTypes xs m2 >>= (fn m2' => return (m1::m2'))
-  | getArgTypes (x::xs) _ = throw ()
 
   fun strSpec m' (SpecAbsMod m) =
       SpecManifestMod (strModtype (ModPath m') m, ModPath m')
@@ -124,30 +102,24 @@ struct
       in f [x] xs end
   and wfModtype (ModTypeSig sl) =
       let fun wfSigbody ([]) = return ()
-      | wfSigbody (((v, v'), s)::sl') = wfSpec s >>= (fn _ =>
-          bindSpec v s (wfSigbody sl'))
-      in
-        allDiff (domain sl) >>= (fn _ =>
-        wfSigbody sl)
-      end
+      | wfSigbody (((v, v'), s)::sl') =
+          wfSpec s >> bindEntry v s (wfSigbody sl')
+      in allDiff (domain sl) >> wfSigbody sl end
   | wfModtype (ModTypeFunctor (v, m1, m2)) =
-      wfModtype m1 >>= (fn _ => bindAbsMod v m1 (wfModtype m2))
+      wfModtype m1 >> bindAbsMod v m1 (wfModtype m2)
   and wfSpec (SpecAbsMod m) = wfModtype m
   | wfSpec (SpecManifestMod (m1, m2)) =
-      wfModtype m1 >>= (fn _ => cModexpr m2 m1 >>= (fn _ => return ()))
+      wfModtype m1 >> cModexpr m2 m1 >> return ()
   | wfSpec (SpecAbsTerm m) =
-      whptTerm m >>= (fn m' => isSort m' >>= (fn _ => return ()))
+      whptTerm m >>= (fn m' => isSort m' >> return ())
   | wfSpec (SpecManifestTerm (m1, m2)) =
-      whptTerm m2 >>= (fn m2' => bequiv m1 m2')
+      whptTerm m2 >>= (fn m2' => Normalize.bequiv m1 m2')
   and cModexpr m m' =
       ptModexpr m >>= (fn m'' =>
-      wfModtype m' >>= (fn _ =>
-      subcModtype m'' m' >>= (fn _ =>
-      return m')))
+      wfModtype m' >> subcModtype m'' m' >> return m')
   and ptModexpr m =
       qpModexpr m >>= (fn m' =>
       return (strModtype m m'))
-
   and qpModexpr (ModStruct dl) =
       let fun cbody ([]) = return ([])
       | cbody (((v1, v2), d)::dl') =
@@ -162,42 +134,33 @@ struct
                 ptModexpr m >>= (fn m' =>
                 return [((v1, v2), SpecAbsMod m')])
             | DefModSig (m1, m2) => 
-                cModexpr m1 m2 >>= (fn _ =>
-                return [(((v1, v2), SpecAbsMod m2))])
+                cModexpr m1 m2 >> return [(((v1, v2), SpecAbsMod m2))]
             | DefModTransparent m =>
                 ptModexpr m >>= (fn m' =>
                 return [((v1, v2), SpecManifestMod (m', m))])
             ) >>= (fn vsl =>
-            bindManySpec vsl (cbody dl') >>= (fn sl =>
+            bindMany vsl (cbody dl') >>= (fn sl =>
             return (vsl @ sl)))
-      in
-        cbody dl >>= (fn vsl =>
-        allDiff (domain vsl) >>= (fn _ =>
-        return (ModTypeSig vsl)))
-      end
+      in cbody dl >>= (fn vsl =>
+        allDiff (domain vsl) >> return (ModTypeSig vsl)) end
   | qpModexpr (ModFunctor (v, m1, m2)) =
-      wfModtype m1 >>= (fn _ =>
-      bindAbsMod v m1 (qpModexpr m2) >>= (fn m2' =>
-      return (ModTypeFunctor (v, m1, m2'))))
+      wfModtype m1 >> bindAbsMod v m1 (qpModexpr m2) >>= (fn m2' =>
+      return (ModTypeFunctor (v, m1, m2')))
   | qpModexpr (ModApp (m1, m2)) =
       qpModexpr m1 >>= (fn m1' =>
-      isFuncT m1' >>= (fn (v, m1'', m2'') =>
+      Term.isFuncT m1' >>= (fn (v, m1'', m2'') =>
       cModexpr m2 m1''>>= (fn m2' =>
       return (MSub.substModtype v m2 m2''))))
   | qpModexpr (ModPath p) =
       qpPath p >>= (fn s => getSpecModtype s)
   and cPath p s =
-      wfSpec s >>= (fn _ =>
-      ptPath p >>= (fn s' =>
-      subcSpec s s' >>= (fn _ =>
-      return s)))
+      wfSpec s >> ptPath p >>= (fn s' => subcSpec s s' >> return s)
   and ptPath p =
-      qpPath p >>= (fn s =>
-      return (strSpec p s))
-  and qpPath (PVar v) = getSpec v
+      qpPath p >>= (fn s => return (strSpec p s))
+  and qpPath (PVar v) = getEntry v
   | qpPath (PPath (m, v)) =
       qpModexpr m >>= (fn s =>
-      isSig s >>= (fn s' =>
+      Term.isSig s >>= (fn s' =>
       field (PPath (m, v)) s'))
   and gammaRestr dom ([]) = return []
   | gammaRestr dom (((x, x'), s)::xs) =
@@ -207,26 +170,24 @@ struct
         return (((x, x'), s')::xs')))
       else throw ()
   and subcModtype (ModTypeSig sl1) (ModTypeSig sl2) =
-      bindManySpec sl1 (gammaRestr (domain sl1) sl2) >>= (fn _ => return ())
-  | subcModtype (ModTypeFunctor (v1, m1, m2)) (ModTypeFunctor (v2, m1', m2')) =
-      subcModtype m1' m1 >>= (fn _ =>
-      bindAbsMod v1 m1' (subcModtype m2 m2') >>= (fn _ => return ()))
+      bindMany sl1 (gammaRestr (domain sl1) sl2) >> return ()
+  | subcModtype (ModTypeFunctor (v1, m1, m2))
+                (ModTypeFunctor (v2, m1', m2')) =
+      subcModtype m1' m1 >> bindAbsMod v1 m1' (subcModtype m2 m2') >>
+      return ()
   | subcModtype _ _ = throw ()
   and subcSpec s (SpecAbsMod m') =
       getSpecModtype s >>= (fn s' => subcModtype s' m')
   | subcSpec (SpecManifestMod (m1, m2)) (SpecManifestMod (m1', m2')) =
-      subcModtype m1 m1' >>= (fn _ => mequiv m2 m2')
+      subcModtype m1 m1' >> Normalize.mequiv m2 m2'
   | subcSpec s (SpecAbsTerm m) =
-      getSpecType s >>= (fn s' => bequiv s' m)
+      getSpecType s >>= (fn s' => Normalize.bequiv s' m)
   | subcSpec (SpecManifestTerm (m1, m2)) (SpecManifestTerm (m1', m2')) =
-      bequiv m1 m1' >>= (fn _ =>
-      bequiv m2 m2' >>= (fn _ => return ()))
+      Normalize.bequiv m1 m1' >> Normalize.bequiv m2 m2'
   | subcSpec _ _ = throw ()
   and cTerm t1 t2 =
-    ptTerm t1 >>= (fn t1' =>
-    whptTerm t2 >>= (fn t2' =>
-    isSort t2' >>= (fn _ =>
-    bequiv t2 t1')))
+    ptTerm t1 >>= (fn t1' => whptTerm t2 >>= (fn t2' =>
+    isSort t2' >> Normalize.bequiv t2 t1'))
   and ptTerm (Path p) = qpPath p >>= (fn s => getSpecType s)
   | ptTerm (Lit (IntLit _)) = return (Lit (IntTyLit))
   | ptTerm (Lit (BoolLit _)) = return (Lit (BoolTyLit))
@@ -235,30 +196,27 @@ struct
   | ptTerm (Sort s) = hasAxiom s >>= (fn s' => return (Sort s'))
   | ptTerm (App (t1, t2)) =
       whptTerm t1 >>= (fn t1' =>
-      isDepProduct t1' >>= (fn (v, t3, t4) =>
-      cTerm t2 t3 >>= (fn _ =>
-      return (TSub.substTerm v t2 t4))))
+      Term.isDepProduct t1' >>= (fn (v, t3, t4) =>
+      cTerm t2 t3 >> return (TSub.substTerm v t2 t4)))
   | ptTerm (Case (t1, pml)) = raise Fail ""
   | ptTerm (IfElse (t1, t2, t3)) =
       ptTerm t1 >>= (fn t1' =>
       whptTerm t2 >>= (fn t2' =>
       whptTerm t3 >>= (fn t3' =>
-      bequiv t2' t3' >>= (fn _ =>
-      isBoolTy t1' >>= (fn _ => return t2')))))
+      Normalize.bequiv t2' t3' >>
+      Term.isBoolTy t1' >> return t2')))
   | ptTerm (Let (v, t1, t2, t3)) =
-      whptTerm t1 >>= (fn t1' =>
-      isSort t1' >>= (fn _ =>
+      whptTerm t1 >>= (fn t1' => isSort t1' >>
       whptTerm t2 >>= (fn t2' =>
-      bequiv t1 t2' >>= (fn _ =>
+      Normalize.bequiv t1 t2' >>
       bindManifestTerm v t1 t2 (whptTerm t3) >>= (fn t3' =>
-      return (Let (v, t1, t2, t3')))))))
+      return (Let (v, t1, t2, t3')))))
   | ptTerm (Lambda (v, t1, t2)) =
-      whptTerm t1 >>= (fn t1' =>
-      isSort t1' >>= (fn _ =>
+      whptTerm t1 >>= (fn t1' => isSort t1' >>
       bindAbsTerm v t1 (ptTerm t2) >>= (fn t2' =>
       ptTerm (DepProduct (v, t1, t2')) >>= (fn t3 =>
-      isSort t3 >>= (fn _ =>
-      return (DepProduct (v, t1, t2')))))))
+      isSort t3 >>
+      return (DepProduct (v, t1, t2')))))
   | ptTerm (DepProduct (v, t1, t2)) =
       whptTerm t1 >>= (fn t1' =>
       isSort t1' >>= (fn s1 =>
@@ -267,7 +225,26 @@ struct
       rho s1 s2 >>= (fn s3 =>
       return (Sort s3))))))
   and whptTerm t =
-    ptTerm t >>= (fn t' => whreduce t' >>= (fn t'' => return t''))
+    ptTerm t >>= (fn t' =>
+    Normalize.whreduce t' >>= (fn t'' => return t''))
+
+  fun leftmost (App (m1, m2)) = leftmost m1
+  | leftmost (Path p) = return p
+  | leftmost _ = throw ()
+
+  fun getArgTypes ([]) _ = return []
+  | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
+      getArgTypes xs m2 >>= (fn m2' => return (m1::m2'))
+  | getArgTypes (x::xs) _ = throw ()
+
+  (* fun collectArgs (DepProduct (v, m1, m2)) =
+    collectArgs m2 >>= (fn args =>
+    return (m1::args))
+  | collectArgs (
+
+  fun wfTCType (DepProduct (v, m1, m2)) =
+  | wfTCType (Sort s) = 
+  *)
 
 end
 

@@ -1,4 +1,4 @@
-infixr 2 >>=
+infixr 2 >>= >>
 infixr 1 ++
 
 signature MONAD =
@@ -226,14 +226,31 @@ struct
   fun throw e = M.return (ExcErr e)
 end
 
-functor MUtil (structure M : MONAD) : sig
+signature MUTIL = sig
   include MONAD
   val liftM : ('a -> 'b) -> 'a monad -> 'b monad
+  val >> : ('a monad * 'b monad) -> 'b monad
+  val sequence : 'a monad list -> 'a list monad
+  val mapM : ('a -> 'b monad) -> 'a list -> 'b list monad
+  val foldM : ('a -> 'b -> 'a monad) -> 'a -> 'b list -> 'a monad
 end
-=
+
+functor MUtil (structure M : MONAD) : MUTIL =
 struct
   open M
 
   fun liftM f m = m >>= (fn x => return (f x))
+
+  fun op >> (m1, m2) = M.>>= (m1, (fn _ => m2))
+
+  fun sequence ([]) = return []
+  | sequence (x::xs) =
+      x >>= (fn x' => sequence xs >>= (fn xs' => return (x'::xs')))
+
+  fun mapM f xs = sequence (map f xs)
+
+  fun foldM f y [] = return y
+  | foldM f y (x::xs) = f y x >>= (fn z => foldM f z xs)
+
 end
 
