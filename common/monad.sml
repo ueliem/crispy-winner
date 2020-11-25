@@ -1,57 +1,47 @@
 infixr 2 >>= >>
 infixr 1 ++
 
-signature MONAD =
-sig
+signature MONAD = sig
   type 'a monad
   val return : 'a -> 'a monad
   val >>= : 'a monad * ('a -> 'b monad) -> 'b monad
-
 end
 
-signature MONADZERO =
-sig
+signature MONADZERO = sig
   include MONAD
   val zero : unit -> 'a monad
 end
 
-signature MONADZEROPLUS =
-sig
+signature MONADZEROPLUS = sig
   include MONADZERO
   val ++ : 'a monad * 'a monad -> 'a monad
 end
 
-signature MONADSTATE =
-sig
+signature MONADSTATE = sig
   type s
   include MONAD (* where type 'a monad = s -> 'a * s *)
   val get : s monad
   val put : s -> unit monad
 end
 
-signature FUNCTOR =
-sig
+signature FUNCTOR = sig
   type 'a f
   val fmap : ('a -> 'b) -> 'a f -> 'b f
 end
 
-structure IdentityMonad : MONAD =
-struct
+structure IdentityMonad : MONAD = struct
   type 'a monad = 'a
   fun return x = x
   fun op >>= (m, f) = f m
 end
 
-functor StateFunctor (type s) :
-sig
+functor StateFunctor (type s) : sig
   (* type 'a state = s -> 'a * s
   include MONAD where type 'a monad = 'a state
   val get : s state
   val put : s -> unit state *)
   include MONADSTATE
-end
-=
-struct
+end = struct
   type s = s
   type 'a state = s -> 'a * s
   type 'a monad = 'a state
@@ -92,21 +82,16 @@ functor OptionT (structure M : MONAD) :
 sig
   include MONADZEROPLUS where type 'a monad = 'a option M.monad
   val lift : 'a M.monad -> 'a option M.monad
-end
-=
-struct
+end = struct
   type 'a monad = 'a option M.monad
   fun return x = M.return (SOME x)
   fun op >>= (m : 'a option M.monad, f : 'a -> 'b option M.monad) : 'b option M.monad = 
     M.>>= (m, (fn (x : 'a option) =>
       case x of
         SOME y => f y
-      | NONE => M.return NONE
-    ))
+      | NONE => M.return NONE))
   fun lift (m : 'a M.monad) : 'a option M.monad =
-    M.>>= (m, fn (x : 'a) =>
-      M.return (SOME x)
-    )
+    M.>>= (m, fn (x : 'a) => M.return (SOME x))
   val zero = (fn _ => M.return NONE)
   fun op ++ (m1, m2) =
     M.>>= (m1, (fn (x : 'a option) =>
@@ -116,13 +101,10 @@ struct
           M.>>= (m2, (fn (z : 'a option) =>
             case z of
               SOME y => M.return (SOME y)
-            | NONE => M.return NONE
-          ))
-    ))
+            | NONE => M.return NONE))))
 end
 
-functor ContinuationT (type r; structure M : MONAD) : 
-sig
+functor ContinuationT (type r; structure M : MONAD) : sig
   datatype 'a cont = Cont of ('a -> r M.monad) -> r M.monad
   include MONAD where type 'a monad = 'a cont
   include FUNCTOR where type 'a f = 'a cont
@@ -130,9 +112,7 @@ sig
   val runCont : 'a monad -> (('a -> r M.monad) -> r M.monad)
   val callCC : (('a -> 'b monad) -> 'a monad) -> 'a monad
   val mapCont : (r M.monad -> r M.monad) -> 'a monad -> 'a monad
-end
-=
-struct
+end = struct
   datatype 'a cont = Cont of ('a -> r M.monad) -> r M.monad
   type 'a monad = 'a cont
   type 'a f = 'a cont
@@ -150,17 +130,14 @@ struct
     Cont (fn k => f (runCont m k))
 end
 
-functor StateT (type s; structure M : MONAD) : 
-sig
+functor StateT (type s; structure M : MONAD) : sig
   (* type 'a state = s -> ('a * s) M.monad
   include MONAD where type 'a monad = 'a state
   val lift : 'a M.monad -> s -> ('a * s) M.monad
   val get : s state
   val put : s -> unit state *)
   include MONADSTATE
-end
-=
-struct
+end = struct
   type s = s
   type 'a state = s -> ('a * s) M.monad
   type 'a monad = 'a state
@@ -177,16 +154,13 @@ struct
   fun put s = (fn _ => M.return ((), s))
 end
 
-functor ReaderT (type s; structure M : MONAD) :
-sig
+functor ReaderT (type s; structure M : MONAD) : sig
   include MONAD where type 'a monad = s -> 'a M.monad
   val lift : 'a M.monad -> 'a monad
   val ask : s monad
   val loc : (s -> s) -> 'a monad -> 'a monad
   val asks : (s -> 'a) -> 'a monad
-end
-=
-struct
+end = struct
   type 'a monad = s -> 'a M.monad
   fun return a e = M.return a
   fun op >>= (m, f) = 
@@ -200,17 +174,14 @@ struct
   fun asks f = ask >>= (fn e => return (f e))
 end
 
-functor ExceptionT (type e; structure M : MONAD) :
-sig
+functor ExceptionT (type e; structure M : MONAD) : sig
   datatype 'a except =
     ExcVal of 'a
   | ExcErr of e
   include MONAD where type 'a monad = 'a except M.monad
   val lift : 'a M.monad -> 'a monad
   val throw : e -> 'a monad
-end
-=
-struct
+end = struct
   datatype 'a except =
     ExcVal of 'a
   | ExcErr of e
@@ -222,7 +193,6 @@ struct
         ExcVal x' => f x'
       | ExcErr x' => M.return (ExcErr x'))))
   fun lift m = M.>>= (m, (fn x => M.return (ExcVal x)))
-
   fun throw e = M.return (ExcErr e)
 end
 
@@ -235,22 +205,16 @@ signature MUTIL = sig
   val foldM : ('a -> 'b -> 'a monad) -> 'a -> 'b list -> 'a monad
 end
 
-functor MUtil (structure M : MONAD) : MUTIL =
-struct
+functor MUtil (structure M : MONAD) : MUTIL = struct
   open M
 
   fun liftM f m = m >>= (fn x => return (f x))
-
   fun op >> (m1, m2) = M.>>= (m1, (fn _ => m2))
-
   fun sequence ([]) = return []
   | sequence (x::xs) =
       x >>= (fn x' => sequence xs >>= (fn xs' => return (x'::xs')))
-
   fun mapM f xs = sequence (map f xs)
-
   fun foldM f y [] = return y
   | foldM f y (x::xs) = f y x >>= (fn z => foldM f z xs)
-
 end
 
