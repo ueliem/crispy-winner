@@ -52,17 +52,17 @@ sig
 
   structure TokenVector : MONO_VECTOR
   structure TokenStream : sig
-    include STRM
+    include FILESTREAM
   end
 
-  val whitespace : unit -> char list FileCharParser.Parser
-  val word : unit -> tok FileCharParser.Parser
-  val integer : unit -> tok FileCharParser.Parser
-  val unitsymbol : unit -> tok FileCharParser.Parser
-  val lpar : unit -> tok FileCharParser.Parser
-  val rpar : unit -> tok FileCharParser.Parser
-  val sym : unit -> tok FileCharParser.Parser
-  val tok : unit -> token FileCharParser.Parser
+  val whitespace : unit -> char list CharFileParser.monad
+  val word : unit -> tok CharFileParser.monad
+  val integer : unit -> tok CharFileParser.monad
+  val unitsymbol : unit -> tok CharFileParser.monad
+  val lpar : unit -> tok CharFileParser.monad
+  val rpar : unit -> tok CharFileParser.monad
+  val sym : unit -> tok CharFileParser.monad
+  val tok : unit -> token CharFileParser.monad
   val tokenize : CharFileStream.stream -> TokenStream.stream
 end
 =
@@ -126,9 +126,9 @@ struct
 
   structure TokenStream = 
   struct
-    structure TS = StreamFunctor (structure S = TokenVector;
+    structure TS = MonoVectorStream (structure S = TokenVector;
       val eq = (fn (x, y) => x = y);
-      val estr = (fn (p, t) => 
+      val stringOfElem = (fn (p, t) => 
         (case t of
           Identifier i => String.concat ["identifier", i]
         | Integer i => String.concat ["integer ", Int.toString i]
@@ -192,7 +192,7 @@ struct
         SOME (p, t) => p
       | NONE => (~1, ~1)) (* raise Fail "pos") *)
 
-    val equiv = TS.equiv
+    val eq = TS.eq
 
     fun pcompare ((l1, c1), (l2, c2)) =
       if l1 < l2 then ~1
@@ -202,23 +202,23 @@ struct
         else 1
       else 1
 
-    fun pos_to_string (l, c) =
+    fun stringOfPos (l, c) =
       String.concat ["line ", Int.toString l, " column ", Int.toString c]
 
-    fun elem_to_string (p, t) = 
+    fun stringOfElem (p, t) = 
       String.concat [TS.elem_to_string (p, t), "(", pos_to_string p, ")"]
 
     fun peek (strm) = TS.peek (#s strm)
   end
 
-  open FileCharParser
+  open CharFileParser
 
-  fun whitespace () : char list Parser =
-    many (FileCharParser.space ())
+  fun whitespace () : char list monad =
+    many (CharFileParser.space ())
 
-  fun word () : tok Parser =
-    FileCharParser.letter () >>= (fn (x : char) =>
-    many (FileCharParser.alphanum ()) >>= (fn y =>
+  fun word () : tok monad =
+    CharFileParser.letter () >>= (fn (x : char) =>
+    many (CharFileParser.alphanum ()) >>= (fn y =>
       case (String.implode (x::y)) of
         "forall" => return ForAll
       | "pi" => return Pi
@@ -246,44 +246,44 @@ struct
       | _ => return (Identifier (String.implode (x::y)))
     ))
 
-  fun integer () : tok Parser =
-    many1 (FileCharParser.digit ()) >>= (fn x =>
+  fun integer () : tok monad =
+    many1 (CharFileParser.digit ()) >>= (fn x =>
       return (Integer (Option.valOf (Int.fromString (String.implode x))))
     )
 
-  fun unitsymbol () : tok Parser =
-    FileCharParser.lpar () >>= (fn x =>
-    FileCharParser.rpar () >>= (fn y =>
+  fun unitsymbol () : tok monad =
+    CharFileParser.lpar () >>= (fn x =>
+    CharFileParser.rpar () >>= (fn y =>
       return UnitSymbol
     ))
 
-  fun lpar () : tok Parser =
-    FileCharParser.lpar () >>= (fn x =>
+  fun lpar () : tok monad =
+    CharFileParser.lpar () >>= (fn x =>
       return LPar
     )
 
-  fun rpar () : tok Parser =
-    FileCharParser.rpar () >>= (fn x =>
+  fun rpar () : tok monad =
+    CharFileParser.rpar () >>= (fn x =>
       return RPar
     )
 
-  fun lcurly () : tok Parser =
-    FileCharParser.lcurly () >>= (fn x =>
+  fun lcurly () : tok monad =
+    CharFileParser.lcurly () >>= (fn x =>
       return LCurly
     )
 
-  fun rcurly () : tok Parser =
-    FileCharParser.rcurly () >>= (fn x =>
+  fun rcurly () : tok monad =
+    CharFileParser.rcurly () >>= (fn x =>
       return RCurly
     )
 
-  fun comma () : tok Parser =
-    FileCharParser.comma () >>= (fn x =>
+  fun comma () : tok monad =
+    CharFileParser.comma () >>= (fn x =>
       return Comma
     )
 
-  fun sym () : tok Parser =
-    many1 (FileCharParser.symbol ()) >>= (fn x =>
+  fun sym () : tok monad =
+    many1 (CharFileParser.symbol ()) >>= (fn x =>
       (case String.implode x of
         "+" => return Plus
       | "-" => return Dash
@@ -302,7 +302,7 @@ struct
       | _ => raise Fail ("not symbol: " ^ (String.implode x))
     ))
 
-  fun tok () : token Parser =
+  fun tok () : token monad =
     position () >>= (fn p =>
     (word ()
     ++ integer ()

@@ -12,11 +12,12 @@ signature PARSER = sig
   val getstate : s monad
   val putstate : s -> unit monad
   val throw : E.err -> 'a monad
-  val position : unit -> S.pos monad
-  val next : unit -> S.elem monad
+  val position : S.pos monad
+  val next : S.elem monad
   val many : 'a monad -> 'a list monad
   val many1 : 'a monad -> 'a list monad
   val optional : 'a monad -> 'a option monad
+  val eoi : unit monad
 end
 
 functor ParserT (structure S : STREAM;
@@ -36,8 +37,8 @@ struct
   val getstate = lift (MM.lift M.get)
   val putstate = (fn st => lift (MM.lift (M.put st)))
   fun throw r = MM.throw r
-  fun position () = getstate >>= (fn st => return (S.position st))
-  fun next () =
+  val position = getstate >>= (fn st => return (S.position st))
+  val next =
     getstate >>= (fn st =>
       (case S.uncons st of
         SOME (x, xs) => 
@@ -52,41 +53,64 @@ struct
   fun optional p =
     p >>= (fn x => return (SOME x))
     ++ (return NONE)
+  val eoi =
+    (next >>= (fn _ => zero ()))
+    ++ (return ())
+end
+
+signature CHARPARSER = sig
+  include PARSER
+  val satisfies : (char -> bool) -> char monad
+  val lpar : char monad
+  val rpar : char monad
+  val lcurly : char monad
+  val rcurly : char monad
+  val comma : char monad
+  val symbol : char monad
+  val digit : char monad
+  val letter : char monad
+  val alphanum : char monad
+  val space : char monad
 end
 
 functor CharParser (structure S : sig
   include STREAM where type elem = char end;
   structure E : sig include ERR where type elem = char end;
   sharing type S.pos = E.pos) : sig
-  include PARSER
-  val satisfies : (char -> bool) -> char monad
-  val lpar : unit -> char monad
-  val rpar : unit -> char monad
-  val lcurly : unit -> char monad
-  val rcurly : unit -> char monad
-  val comma : unit -> char monad
-  val symbol : unit -> char monad
-  val digit : unit -> char monad
-  val letter : unit -> char monad
-  val alphanum : unit -> char monad
-  val space : unit -> char monad
+  include CHARPARSER
 end = struct
   structure CParser = ParserT(structure S = S; structure E = E)
   open CParser
 
-  val symbols = [#"+", #"-", #"*", #"/", #"=", #">", #"<", #":"]
+  val symbols = [#"+", #"-", #"*", #"/",
+                 #"/", #"=", #">", #"<",
+                 #":", #";", #".", #"|"]
   fun satisfies f = 
-    next () >>= (fn x =>
+    next >>= (fn x =>
     if f x then return x else zero ())
-  fun lpar () = satisfies (fn x => x = #"(")
-  fun rpar () = satisfies (fn x => x = #")")
-  fun lcurly () = satisfies (fn x => x = #"{")
-  fun rcurly () = satisfies (fn x => x = #"}")
-  fun symbol () = satisfies (fn x => List.exists (fn y => x = y) symbols)
-  fun comma () = satisfies (fn x => x = #",")
-  fun digit () = satisfies Char.isAlphaNum
-  fun letter () = satisfies Char.isAlpha
-  fun alphanum () = satisfies Char.isAlphaNum
-  fun space () = satisfies Char.isSpace
+  val lpar = satisfies (fn x => x = #"(")
+  val rpar = satisfies (fn x => x = #")")
+  val lcurly = satisfies (fn x => x = #"{")
+  val rcurly = satisfies (fn x => x = #"}")
+  val symbol = satisfies (fn x => List.exists (fn y => x = y) symbols)
+  val comma = satisfies (fn x => x = #",")
+  val digit = satisfies Char.isAlphaNum
+  val letter = satisfies Char.isAlpha
+  val alphanum = satisfies Char.isAlphaNum
+  val space = satisfies Char.isSpace
+end
+
+functor CharVectorParser (structure E : sig
+  include ERR where type elem = char where type pos = int end) : CHARPARSER =
+struct
+  structure CP = CharParser (structure S = CharVectorStream; structure E = E)
+  open CP
+end
+
+functor CharFileParser (structure E : sig
+  include ERR where type elem = char where type pos = int * int end) : CHARPARSER =
+struct
+  structure CP = CharParser (structure S = CharFileStream; structure E = E)
+  open CP
 end
 
