@@ -1,7 +1,7 @@
 use "common/monad.sml";
 use "parsercombinator/stream.sml";
 use "parsercombinator/pc.sml";
-use "src/syntax/tok.sml";
+use "src/syntax/tokenizer.sml";
 use "src/mts/interpmt.sml";
 use "src/mts/lang/mts.sml";
 use "src/mts/lang/subst.sml";
