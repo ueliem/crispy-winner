@@ -10,8 +10,6 @@ structure Tokenizer : sig
     Identifier of string
   | Integer of int | Boolean of bool
   | LPar | RPar
-  (* | Period | Colon | Semicolon | Pipe
-  | Defined *)
   | Symbol of string
   | KWFuncT | KWSig
   | KWFunctor | KWStruct | KWTransparent
@@ -19,7 +17,7 @@ structure Tokenizer : sig
   | KWForAll | KWFun | KWCase | KWOf
   | KWIf | KWThen | KWElse
   | KWLet | KWIn | KWEnd
-  | KWInt | KWBool
+  | KWInt | KWBool | KWInductive
   | EOI
   type tok = CharFileStream.pos * t
   val whitespace : char list monad
@@ -37,8 +35,6 @@ end = struct
     Identifier of string
   | Integer of int | Boolean of bool
   | LPar | RPar
-  (* | Period | Colon | Semicolon | Pipe
-  | Defined *)
   | Symbol of string
   | KWFuncT | KWSig
   | KWFunctor | KWStruct | KWTransparent
@@ -46,7 +42,7 @@ end = struct
   | KWForAll | KWFun | KWCase | KWOf
   | KWIf | KWThen | KWElse
   | KWLet | KWIn | KWEnd
-  | KWInt | KWBool
+  | KWInt | KWBool | KWInductive
   | EOI
   type tok = CharFileStream.pos * t
   val whitespace = many space
@@ -76,6 +72,7 @@ end = struct
     | "bool" => return KWBool
     | "true" => return (Boolean true)
     | "false" => return (Boolean false)
+    | "inductive" => return (KWInductive)
     | _ => zero ())
   val ident =
     letter >>= (fn x =>
@@ -90,18 +87,15 @@ end = struct
   val rpar = rpar >>= (fn x => return RPar)
   val token =
     position >>= (fn p =>
-    (keyword
-    ++ ident
-    ++ sym
-    ++ integer
-    ++ lpar ++ rpar)
-    >>= (fn x =>
+    (keyword ++ ident ++ sym ++ integer ++ lpar ++ rpar) >>= (fn x =>
     whitespace >>= (fn _ =>
       let val _ = PolyML.print p
       in return (p, x) end)))
   val tokenize = many1 token >>= (fn ts => eoi >>= (fn _ => return ts))
 
 end
+
+structure TokenizerUtil = MUtil (structure M = Tokenizer)
 
 structure TokenVector : MONO_VECTOR =
 struct
@@ -112,6 +106,7 @@ end
 
 structure TokenStream : sig
   include STREAM
+  val fromList : elem list -> stream
 end = struct
   open Tokenizer
   structure TS = MonoVectorStream (structure S = TokenVector;
@@ -147,7 +142,9 @@ end = struct
       | KWEnd => "end"
       | KWInt => "int"
       | KWBool => "bool"
+      | KWInductive => "inductive"
       | EOI => "*EOI*")))
   open TS
+  fun fromList l = { s = (TokenVector.fromList l), pos = 0 }
 end
 

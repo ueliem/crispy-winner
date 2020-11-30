@@ -63,8 +63,6 @@ signature CHARPARSER = sig
   val satisfies : (char -> bool) -> char monad
   val lpar : char monad
   val rpar : char monad
-  val lcurly : char monad
-  val rcurly : char monad
   val comma : char monad
   val symbol : char monad
   val digit : char monad
@@ -84,14 +82,13 @@ end = struct
 
   val symbols = [#"+", #"-", #"*", #"/",
                  #"/", #"=", #">", #"<",
-                 #":", #";", #".", #"|"]
+                 #":", #";", #".", #"|",
+                 #"_"]
   fun satisfies f = 
     next >>= (fn x =>
     if f x then return x else zero ())
   val lpar = satisfies (fn x => x = #"(")
   val rpar = satisfies (fn x => x = #")")
-  val lcurly = satisfies (fn x => x = #"{")
-  val rcurly = satisfies (fn x => x = #"}")
   val symbol = satisfies (fn x => List.exists (fn y => x = y) symbols)
   val comma = satisfies (fn x => x = #",")
   val digit = satisfies Char.isAlphaNum

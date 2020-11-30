@@ -26,7 +26,7 @@ sig
   | Lit of lit
   | Sort of sort
   | App of term * term
-  | Case of term * (path * var list * term) list
+  | Case of term * (var * var list * term) list
   | IfElse of term * term * term
   | Let of var * term * term * term
   | Lambda of var * term * term
@@ -86,7 +86,7 @@ struct
   | Lit of lit
   | Sort of sort
   | App of term * term
-  | Case of term * (path * var list * term) list
+  | Case of term * (var * var list * term) list
   | IfElse of term * term * term
   | Let of var * term * term * term
   | Lambda of var * term * term
