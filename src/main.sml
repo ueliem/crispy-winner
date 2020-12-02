@@ -1,6 +1,9 @@
+use "common/common.sml";
 use "common/monad.sml";
+use "src/compilerm.sml";
 use "parsercombinator/stream.sml";
 use "parsercombinator/pc.sml";
+use "parsercombinator/charparser.sml";
 use "src/mts/interpmt.sml";
 
 use "src/mts/lang/mts.sml";
@@ -16,26 +19,34 @@ use "src/mts/term/pseudotype.sml";
 use "src/mts/term/normalize.sml";
 use "src/mts/check.sml";
 
-open Tokenizer
-open TokenizerUtil
-open SyntaxParser
-open TokenParserUtil
-
-val compile =
+fun compile () : unit =
   let
     val cvs : CharFileStream.stream = raise Fail ""
+    val (r, s) = Tokenizer.run Tokenizer.tokenize cvs
   in
-    tokenize >>= (fn tl =>
-    SyntaxParser.getstate >>= (fn s =>
+    (case r of
+      Left (SOME tl) => raise Fail ""
+    | Left NONE => raise Fail ""
+    | Right e => PolyML.print e)
+    (* (case tokenize cvs of
+      ExcVal _ => raise Fail ""
+    | ExcErr _ => raise Fail "") *)
+    (*
+    * load file
+    * tokenize
+    * parse
+    * check
+    *)
+    (* SyntaxParser.getstate >>= (fn s =>
     SyntaxParser.putstate (TokenStream.fromList tl) >>
     SyntaxParser.modExpr () >>= (fn m =>
     MTSCheck.ptModexpr prog [] ([], [], []) >>= (fn m' =>
-    return (raise Fail "")))))
+    return (raise Fail ""))))) *)
   end
 
 fun main () =
   let
-    val _ = raise Fail ""
+    fun exit _ = OS.Process.exit (OS.Process.success)
   in
     ()
   end
