@@ -1,5 +1,5 @@
 signature COMPILERM = sig
-  include MONADZEROPLUS
+  include MONAD
   type var
   val eqv : var -> var -> bool
   type enventry
@@ -39,22 +39,19 @@ struct
   type pts = C.pts
   type err = unit
 
-  structure STM = StateFunctor (type s = freshName)
   structure FVM = StateFunctor (type s = freshName)
   structure PTS = StateT (type s = pts; structure M = FVM)
   structure ENV = ReaderT (type s = env; structure M = PTS)
   structure EXC = ExceptionT (type e = err; structure M = ENV)
-  structure OPT = OptionT (structure M = EXC)
-  open OPT
+  open EXC
 
-  val getfvm = lift (EXC.lift (ENV.lift (PTS.lift FVM.get)))
+  val getfvm = lift (ENV.lift (PTS.lift FVM.get))
   val putfvm =
-    (fn st => lift (EXC.lift (ENV.lift (PTS.lift (FVM.put st)))))
-  val getpts = lift (EXC.lift (ENV.lift (PTS.get)))
-  val putpts = (fn st => lift (EXC.lift (ENV.lift (PTS.put st))))
-  val ask = lift (EXC.lift ENV.ask)
+    (fn st => lift (ENV.lift (PTS.lift (FVM.put st))))
+  val getpts = lift (ENV.lift (PTS.get))
+  val putpts = (fn st => lift (ENV.lift (PTS.put st)))
+  val ask = lift ENV.ask
   fun loc f m = (ENV.loc f) m
-  fun throw () = EXC.throw ()
   fun inEnv v e = List.exists (fn (v', x) => eqv v v') e
   fun isFresh v =
     ask >>= (fn e =>

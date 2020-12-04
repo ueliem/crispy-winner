@@ -9,11 +9,13 @@ signature PARSER = sig
   structure E : ERR
   type s = S.stream
   type e = E.err
+  structure PST : STATET
+  structure PEXC : EXCEPTIONT
+  structure POPT : OPTIONT
   include MONADZEROPLUS
   val getstate : s monad
   val putstate : s -> unit monad
   val throw : e -> 'a monad
-  val run : 'a monad -> s -> ('a option, e) either * s
   val position : S.pos monad
   val next : S.elem monad
   val many : 'a monad -> 'a list monad
@@ -25,20 +27,23 @@ end
 functor ParserT (structure S : STREAM;
   structure E : ERR;
   sharing type S.pos = E.pos;
-  sharing type S.elem = E.elem) : PARSER =
-struct
+  sharing type S.elem = E.elem;
+  structure M : MONAD) : sig
+    include PARSER
+    structure M : MONAD end = struct
   structure S = S
   structure E = E
+  structure M = M
   type s = S.stream
   type e = E.err
-  structure M = StateFunctor (type s = s)
-  structure MM = ExceptionT (type e = e; structure M = M)
-  structure MMM = OptionT (structure M = MM)
-  open MMM
+  structure PST = StateT (type s = s; structure M = M)
+  structure PEXC = ExceptionT (type e = e; structure M = PST)
+  structure POPT = OptionT (structure M = PEXC)
+  open POPT
 
-  val getstate = lift (MM.lift M.get)
-  val putstate = (fn st => lift (MM.lift (M.put st)))
-  fun throw r = MM.throw r
+  val getstate = lift (PEXC.lift PST.get)
+  val putstate = (fn st => lift (PEXC.lift (PST.put st)))
+  fun throw r = PEXC.throw r
   val position = getstate >>= (fn st => return (S.position st))
   val next =
     getstate >>= (fn st =>
@@ -58,6 +63,5 @@ struct
   val eoi =
     (next >>= (fn _ => zero ()))
     ++ (return ())
-  val run = MM.run
 end
 

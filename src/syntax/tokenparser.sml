@@ -45,7 +45,8 @@ structure TokenParser : sig
 end = struct
   structure TP = ParserT (
     structure S = TokenStream;
-    structure E = PErr)
+    structure E = PErr;
+    structure M = MTSCompilerM)
   open TP
 
   val intLit = next >>= (fn (p, x) =>

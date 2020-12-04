@@ -6,6 +6,8 @@ end
 
 structure Tokenizer : sig
   include PARSER
+  structure M : MONAD
+  structure CFP : PARSER
   datatype t =
     Identifier of string
   | Integer of int | Boolean of bool
@@ -29,7 +31,8 @@ structure Tokenizer : sig
   val token : tok monad
   val tokenize : tok list monad
 end = struct
-  structure CFP = CharFileParser (structure E = TErr)
+  structure M = MTSCompilerM
+  structure CFP = CharFileParser (structure M = M; structure E = TErr)
   open CFP
   datatype t =
     Identifier of string
@@ -91,7 +94,11 @@ end = struct
     whitespace >>= (fn _ =>
       let val _ = PolyML.print p
       in return (p, x) end)))
-  val tokenize = many1 token >>= (fn ts => eoi >>= (fn _ => return ts))
+
+  val tokenize =
+    (many1 token >>= (fn ts => eoi >>= (fn _ => return ts)))
+    (* (many1 token >>= (fn ts => eoi >>= (fn _ => return ts))) cs
+    * *)
 
 end
 

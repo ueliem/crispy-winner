@@ -14,10 +14,12 @@ end
 functor CharParser (structure S : sig
   include STREAM where type elem = char end;
   structure E : sig include ERR where type elem = char end;
-  sharing type S.pos = E.pos) : sig
+  sharing type S.pos = E.pos;
+  structure M : MONAD) : sig
   include CHARPARSER
-end = struct
-  structure CParser = ParserT(structure S = S; structure E = E)
+  structure M : MONAD end = struct
+  structure CParser =
+    ParserT(structure S = S; structure E = E; structure M = M)
   open CParser
 
   val symbols = [#"+", #"-", #"*", #"/",
@@ -38,16 +40,22 @@ end = struct
 end
 
 functor CharVectorParser (structure E : sig
-  include ERR where type elem = char where type pos = int end) : CHARPARSER =
-struct
-  structure CP = CharParser (structure S = CharVectorStream; structure E = E)
+  include ERR where type elem = char where type pos = int end;
+  structure M : MONAD) : sig
+  include CHARPARSER
+  structure M : MONAD end = struct
+  structure CP =
+    CharParser (structure S = CharVectorStream; structure E = E; structure M = M)
   open CP
 end
 
 functor CharFileParser (structure E : sig
-  include ERR where type elem = char where type pos = int * int end) : CHARPARSER =
-struct
-  structure CP = CharParser (structure S = CharFileStream; structure E = E)
+  include ERR where type elem = char where type pos = int * int end;
+  structure M : MONAD) : sig
+  include CHARPARSER
+  structure M : MONAD end = struct
+  structure CP =
+    CharParser (structure S = CharFileStream; structure E = E; structure M = M)
   open CP
 end
 

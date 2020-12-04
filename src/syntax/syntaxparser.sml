@@ -103,6 +103,5 @@ end = struct
   and modFuncT _ = kwFuncT >> lpar >> binder >>= (fn v => colon >>
     modType () >>= (fn m1 => rpar >> rightarrow >>
     modType () >>= (fn m2 => return (MTS.ModTypeFunctor (v, m1, m2)))))
-    
 end
 

@@ -51,14 +51,21 @@ struct
     else 1
 end
 
-structure CharVectorStream =
-  MonoVectorStream (structure S = CharVector;
+structure CharVectorStream : sig
+  include STREAM
+  val fromString : string -> stream
+end = struct
+  structure MVS = MonoVectorStream (structure S = CharVector;
     val eq = (fn (x, y) => x = y);
     val stringOfElem = Char.toString)
+  open MVS
+  fun fromString s = ({ s = s, pos = 0 })
+end
 
 structure CharFileStream : sig
   include FILESTREAM
   structure CS : STREAM
+  val fromString : string -> stream
 end = struct
   structure CS = CharVectorStream
   type rawStream = CS.stream
@@ -70,7 +77,6 @@ end = struct
   val stringOfElem = CS.stringOfElem
   fun stringOfPos (l, c) =
     String.concat ["line ", Int.toString l, " column ", Int.toString c]
-
   fun uncons ({ s, pos }) = 
     let val (row, col) = pos
     in (case CS.uncons s of
@@ -81,7 +87,6 @@ end = struct
     | NONE => NONE) end
 
   fun peek (strm) = CS.peek (#s strm)
-
   fun position ({ s, pos }) = pos
   fun rawPosition ({ s, pos }) = #pos s
   fun pcompare ((l1, c1), (l2, c2)) =
@@ -91,5 +96,6 @@ end = struct
       else if c1 = c2 then 0
       else 1
     else 1
+  fun fromString s = ({ pos = (0, 0), s = CS.fromString s })
 end
 
