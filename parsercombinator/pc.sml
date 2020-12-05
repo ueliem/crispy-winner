@@ -17,7 +17,7 @@ signature PARSER = sig
   val putstate : s -> unit monad
   val throw : e -> 'a monad
   val position : S.pos monad
-  val next : S.elem monad
+  val next : S.item monad
   val many : 'a monad -> 'a list monad
   val many1 : 'a monad -> 'a list monad
   val optional : 'a monad -> 'a option monad
@@ -27,7 +27,7 @@ end
 functor ParserT (structure S : STREAM;
   structure E : ERR;
   sharing type S.pos = E.pos;
-  sharing type S.elem = E.elem;
+  sharing type S.item = E.elem;
   structure M : MONAD) : sig
     include PARSER
     structure M : MONAD end = struct

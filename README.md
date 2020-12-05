@@ -1,5 +1,9 @@
 # A Language
 
+## To Compile
+
+```mlton crispy.mlb```
+
 ## Introduction
 
 This is a functional systems language

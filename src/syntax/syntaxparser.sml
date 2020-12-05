@@ -1,14 +1,16 @@
 structure SyntaxParser : sig
   include PARSER
+  structure M : MONAD
+  structure TSP : PARSER
   val binder : MTS.var monad
+  val ptsLiteral : MTS.term monad
+  val ptsSort : MTS.term monad
   val annotatedBinder : unit -> (MTS.var * MTS.term) monad
   val path : unit -> MTS.path monad
   val def : unit -> MTS.def monad
   val specification : unit -> MTS.specification monad
   val ptsTerm : unit -> MTS.term monad
   val ptsPath : unit -> MTS.term monad
-  val ptsLiteral : unit -> MTS.term monad
-  val ptsSort : unit -> MTS.term monad
   val ptsApp : unit -> MTS.term monad
   val ptsCase : unit -> MTS.term monad
   val ptsIfElse : unit -> MTS.term monad
@@ -24,13 +26,23 @@ structure SyntaxParser : sig
   val modSig : unit -> MTS.modtype monad
   val modFuncT : unit -> MTS.modtype monad
 end = struct
-  open TokenParser
-  open TokenParserUtil
+  structure M = MTSCompilerM
+  structure TSP = MTSTokenParser
+  open TSP
+  open MTSTokenParserUtil
   val binder = (ident >>= (fn v => return (MTS.NamedVar v)))
     ++ (underscore >> return (MTS.AnonVar))
-  fun annotatedBinder _ = lpar >> binder >>= (fn v => colon >>
+  val ptsLiteral = (kwInt >> return (MTS.Lit (MTS.IntTyLit)))
+    ++ (kwBool >> return (MTS.Lit (MTS.BoolTyLit)))
+    ++ (intLit >>= (fn i => return (MTS.Lit (MTS.IntLit i))))
+    ++ (boolLit >>= (fn b => return (MTS.Lit (MTS.BoolLit b))))
+  val ptsSort = (kwSet >> return (MTS.Sort (MTS.TypeVal)))
+    ++ (kwType >> return (MTS.Sort (MTS.KindVal)))
+    ++ (kwComp >> return (MTS.Sort (MTS.TypeComp)))
+    ++ (kwTrans >> return (MTS.Sort (MTS.KindComp)))
+  fun annotatedBinder () = lpar >> binder >>= (fn v => colon >>
     ptsTerm () >>= (fn t => rpar >> return (v, t)))
-  and path _ = (binder >>= (fn v => return (MTS.PVar v)))
+  and path () = (binder >>= (fn v => return (MTS.PVar v)))
     ++ (modExpr () >>= (fn m => period >> binder >>= (fn v =>
       return (MTS.PPath (m, v)))))
   and def _ = (ptsTerm () >>= (fn t => return (MTS.DefVal t)))
@@ -51,38 +63,30 @@ end = struct
     ++ (modType () >>= (fn m => return (MTS.SpecAbsMod m)))
     ++ (modType () >>= (fn m1 => defined >> modExpr () >>= (fn m2 =>
       return (MTS.SpecManifestMod (m1, m2)))))
-  and ptsTerm _ = ptsPath () ++ ptsLiteral () ++ ptsSort ()
+  and ptsTerm () = ptsPath () ++ ptsLiteral ++ ptsSort
     ++ ptsApp () ++ ptsCase () ++ ptsIfElse ()
     ++ ptsLet () ++ ptsLambda () ++ ptsDepProduct ()
-  and ptsPath _ = path () >>= (fn p => return (MTS.Path p))
-  and ptsLiteral _ = (kwInt >> return (MTS.Lit (MTS.IntTyLit)))
-    ++ (kwBool >> return (MTS.Lit (MTS.BoolTyLit)))
-    ++ (intLit >>= (fn i => return (MTS.Lit (MTS.IntLit i))))
-    ++ (boolLit >>= (fn b => return (MTS.Lit (MTS.BoolLit b))))
-  and ptsSort _ = (kwSet >> return (MTS.Sort (MTS.TypeVal)))
-    ++ (kwType >> return (MTS.Sort (MTS.KindVal)))
-    ++ (kwComp >> return (MTS.Sort (MTS.TypeComp)))
-    ++ (kwTrans >> return (MTS.Sort (MTS.KindComp)))
-  and ptsApp _ = ptsTerm () >>= (fn t1 => ptsTerm () >>= (fn t2 =>
+  and ptsPath () = path () >>= (fn p => return (MTS.Path p))
+  and ptsApp () = ptsTerm () >>= (fn t1 => ptsTerm () >>= (fn t2 =>
     return (MTS.App (t1, t2))))
-  and ptsCase _ = let fun ptsAlt _ =
+  and ptsCase () = let fun ptsAlt _ =
     binder >>= (fn c => many binder >>= (fn vs =>
     rightarrow >> ptsTerm () >>= (fn t' => return (c, vs, t'))))
     in kwCase >> ptsTerm () >>= (fn t => kwOf >>
       ptsAlt () >>= (fn x => many1 (pipe >> ptsAlt ()) >>= (fn xs =>
       return (MTS.Case (t, x::xs))))) end
-  and ptsIfElse _ = kwIf >> ptsTerm () >>= (fn t1 =>
+  and ptsIfElse () = kwIf >> ptsTerm () >>= (fn t1 =>
     kwThen >> ptsTerm () >>= (fn t2 =>
     kwElse >> ptsTerm () >>= (fn t3 =>
     return (MTS.IfElse (t1, t2, t3)))))
-  and ptsLet _ = kwLet >> annotatedBinder () >>= (fn (v, t1) =>
+  and ptsLet () = kwLet >> annotatedBinder () >>= (fn (v, t1) =>
     defined >> ptsTerm () >>= (fn t2 =>
     kwIn >> ptsTerm () >>= (fn t3 =>
     kwEnd >> return (MTS.Let (v, t1, t2, t3)))))
-  and ptsLambda _ = kwFun >> annotatedBinder () >>= (fn (v, t1) =>
+  and ptsLambda () = kwFun >> annotatedBinder () >>= (fn (v, t1) =>
     rightarrow >> ptsTerm () >>= (fn t2 =>
     return (MTS.Lambda (v, t1, t2))))
-  and ptsDepProduct _ = kwForAll >> annotatedBinder () >>= (fn (v, t1) =>
+  and ptsDepProduct () = kwForAll >> annotatedBinder () >>= (fn (v, t1) =>
     rightarrow >> ptsTerm () >>= (fn t2 =>
     return (MTS.DepProduct (v, t1, t2))))
   and modExpr _ =

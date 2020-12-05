@@ -1,6 +1,6 @@
 structure Compiler : sig
   val loadFile : string -> CharFileStream.stream MTSCompilerM.monad
-  val tokenizeStream : CharFileStream.stream -> TokenStream.stream MTSCompilerM.monad
+  val tokenizeStream : CharFileStream.stream -> MTSTokenizer.TokenStream.stream MTSCompilerM.monad
   val compile : string -> unit MTSCompilerM.monad
 end = struct
   open MTSCompilerM
@@ -8,14 +8,21 @@ end = struct
     let val v = TextIO.inputAll (TextIO.openIn f)
     in return (CharFileStream.fromString v) end
   fun tokenizeStream cvs =
-    Tokenizer.tokenize cvs >>= (fn (r, _) =>
+    MTSTokenizer.tokenize cvs >>= (fn (r, _) =>
     (case r of
-      Tokenizer.CFP.PEXC.ExcVal (SOME tl) => return (TokenStream.fromList tl)
-    | Tokenizer.CFP.PEXC.ExcVal NONE => throw ()
-    | Tokenizer.CFP.PEXC.ExcErr e => throw ()))
+      MTSTokenizer.CP.PEXC.ExcVal (SOME tl) => return (MTSTokenizer.TokenStream.fromList tl)
+    | MTSTokenizer.CP.PEXC.ExcVal NONE => throw ()
+    | MTSTokenizer.CP.PEXC.ExcErr e => throw ()))
+  fun parseStream tvs =
+    SyntaxParser.ptsTerm () tvs >>= (fn (r, _) =>
+    (case r of
+      SyntaxParser.TSP.PEXC.ExcVal (SOME _) => return ()
+    | SyntaxParser.TSP.PEXC.ExcVal NONE => throw ()
+    | SyntaxParser.TSP.PEXC.ExcErr e => throw ()))
   fun compile f =
     loadFile f >>= (fn cs =>
     tokenizeStream cs >>= (fn ts =>
-    return ()))
+    parseStream ts >>= (fn () =>
+    return ())))
 end
 

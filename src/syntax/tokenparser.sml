@@ -1,10 +1,10 @@
 structure PErr = struct
   type err = unit
-  type pos = TokenStream.pos
-  type elem = TokenStream.elem
+  type pos = MTSTokenizer.TokenStream.pos
+  type elem = MTSTokenizer.TokenStream.item
 end
 
-structure TokenParser : sig
+functor TokenParser (structure M : MONAD) : sig
   include PARSER
   val intLit : int monad
   val boolLit : bool monad
@@ -44,21 +44,21 @@ structure TokenParser : sig
   val tokenEOI : unit monad
 end = struct
   structure TP = ParserT (
-    structure S = TokenStream;
+    structure S = MTSTokenizer.TokenStream;
     structure E = PErr;
-    structure M = MTSCompilerM)
+    structure M = M)
   open TP
 
   val intLit = next >>= (fn (p, x) =>
-    case x of Tokenizer.Integer i => return i | _ => zero ())
+    case x of MTSToken.Integer i => return i | _ => zero ())
   val boolLit = next >>= (fn (p, x) =>
-    case x of Tokenizer.Boolean b => return b | _ => zero ())
+    case x of MTSToken.Boolean b => return b | _ => zero ())
   val lpar = next >>= (fn (p, x) =>
-    case x of Tokenizer.LPar => return () | _ => zero ())
+    case x of MTSToken.LPar => return () | _ => zero ())
   val rpar = next >>= (fn (p, x) =>
-    case x of Tokenizer.LPar => return () | _ => zero ())
+    case x of MTSToken.LPar => return () | _ => zero ())
   val symbol = next >>= (fn (p, x) =>
-    case x of Tokenizer.Symbol s => return s
+    case x of MTSToken.Symbol s => return s
     | _ => zero ())
   val matchSymbol =
     (fn s => symbol >>= (fn s' =>
@@ -71,55 +71,56 @@ end = struct
   val rightarrow = matchSymbol "=>"
   val underscore = matchSymbol "_"
   val ident = next >>= (fn (p, x) =>
-    case x of Tokenizer.Identifier s => return s
+    case x of MTSToken.Identifier s => return s
     | _ => zero ())
   val kwFuncT = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwSig = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwFunctor = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwStruct = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwTransparent = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwSet = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwType = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwComp = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwTrans = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwForAll = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwFun = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwCase = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwOf = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwIf = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwThen = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwElse = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwLet = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwIn = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwEnd = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwInt = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwBool = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWFuncT => return () | _ => zero ())
+    case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwInductive = next >>= (fn (p, x) =>
-    case x of Tokenizer.KWInductive => return () | _ => zero ())
+    case x of MTSToken.KWInductive => return () | _ => zero ())
   val tokenEOI = next >>= (fn (p, x) =>
-    case x of Tokenizer.EOI => return () | _ => zero ())
+    case x of MTSToken.EOI => return () | _ => zero ())
 end
 
-structure TokenParserUtil = MUtil (structure M = TokenParser)
+structure MTSTokenParser = TokenParser (structure M = MTSCompilerM)
+structure MTSTokenParserUtil = MUtil (structure M = MTSTokenParser)
 

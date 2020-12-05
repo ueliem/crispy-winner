@@ -12,7 +12,7 @@ signature CHARPARSER = sig
 end
 
 functor CharParser (structure S : sig
-  include STREAM where type elem = char end;
+  include STREAM where type item = char end;
   structure E : sig include ERR where type elem = char end;
   sharing type S.pos = E.pos;
   structure M : MONAD) : sig
