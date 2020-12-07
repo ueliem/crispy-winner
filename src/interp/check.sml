@@ -1,5 +1,5 @@
 structure MTSCheck : sig
-  include MONADZEROPLUS where type 'a monad = 'a InterpM.monad
+  include MONADZEROPLUS where type 'a monad = 'a MTSInterpM.monad
   val isSort : MTS.term -> MTS.sort monad
   val isBottomSort : MTS.sort -> unit monad
   val isTopSort : MTS.sort -> unit monad
@@ -7,7 +7,6 @@ structure MTSCheck : sig
   val hasRule : MTS.sort -> MTS.sort -> MTS.sort monad
   val startsRule : MTS.sort -> unit monad
   val rho : MTS.sort -> MTS.sort -> MTS.sort monad
-
   val strSpec : MTS.path -> MTS.specification -> MTS.specification
   val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
   val domain : ((MTS.var * MTS.var) * MTS.specification) list
@@ -21,149 +20,139 @@ structure MTSCheck : sig
   val cPath : MTS.path -> MTS.specification -> MTS.specification monad
   val ptPath : MTS.path -> MTS.specification monad
   val qpPath : MTS.path -> MTS.specification monad
-  val gammaRestr : MTS.var list -> ((MTS.var * MTS.var) * MTS.specification) list
+  val gammaRestr : MTS.var list
+    -> ((MTS.var * MTS.var) * MTS.specification) list
     -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
-  (* val leftmost : MTS.term -> MTS.var monad
-  val collectArgs : MTS.term -> MTS.term list monad
+  val leftmost : MTS.term -> MTS.var monad
+  (* val collectArgs : MTS.term -> MTS.term list monad
   val wfTCType : MTS.term -> unit monad
   val wfDCType : MTS.term -> unit monad *)
 end
 =
 struct
-  open InterpM
-  open InterpMTSUtil
+  open MTSInterpM
+  open Util
   open MTS
-
   fun isSort (Sort s) =
     getSorts () >>= (fn srts =>
       if List.exists (fn x => x = s) srts
       then return s else throw ())
-  | isSort _ = throw ()
-
+    | isSort _ = throw ()
   fun isBottomSort srt =
     getSorts () >>= (fn srts =>
     getAxioms () >>= (fn axs =>
       if List.exists (fn (s1, s2) => s2 = srt) axs
       then throw () else return ()))
-
   fun isTopSort srt =
     getSorts () >>= (fn srts =>
     getAxioms () >>= (fn axs =>
       if List.exists (fn (s1, s2) => s1 = srt) axs
       then throw () else return ()))
-
   fun hasAxiom s1 =
     getAxioms () >>= (fn axs =>
       (case List.find (fn (s1', s2) => s1 = s1') axs of
         SOME (s1, s2) => return s2
       | NONE => throw ()))
-
   fun hasRule s1 s2 =
     getRules () >>= (fn rls =>
-      (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
+      (case List.find (fn (s1', s2', s3) =>
+        s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
       | NONE => throw ()))
-
   fun startsRule s1 =
     getRules () >>= (fn rls =>
       (case List.find (fn (s1', s2', s3) => s1 = s1') rls of
         SOME (s1, s2, s3) => return ()
       | NONE => throw ()))
-
   fun rho s1 s2 =
     getRules () >>= (fn rls =>
-      (case List.find (fn (s1', s2', s3) => s1 = s1' andalso s2 = s2') rls of
+      (case List.find (fn (s1', s2', s3) =>
+        s1 = s1' andalso s2 = s2') rls of
         SOME (s1, s2, s3) => return s3
       | NONE => throw ()))
-
   fun strSpec m' (SpecAbsMod m) =
       SpecManifestMod (strModtype (ModPath m') m, ModPath m')
-  | strSpec m' (SpecManifestMod (m1, m2)) =
+    | strSpec m' (SpecManifestMod (m1, m2)) =
       SpecManifestMod (strModtype (ModPath m') m1, m2)
-  | strSpec m' (SpecAbsTerm m) = SpecManifestTerm (m, Path m')
-  | strSpec m' (SpecManifestTerm (m1, m2)) =
+    | strSpec m' (SpecAbsTerm m) = SpecManifestTerm (m, Path m')
+    | strSpec m' (SpecManifestTerm (m1, m2)) =
       SpecManifestTerm (m1, m2)
   and strModtype m' (ModTypeSig sl) =
       ModTypeSig (map (fn ((v, v'), s) =>
         ((v, v'), strSpec (PPath (m', v)) s)) sl)
-  | strModtype m' (ModTypeFunctor (v, m1, m2)) =
+    | strModtype m' (ModTypeFunctor (v, m1, m2)) =
       ModTypeFunctor (v, m1, strModtype (ModApp (m', ModPath (PVar v))) m2)
-
   fun domain sl = (#1 (ListPair.unzip (#1 (ListPair.unzip sl))))
   and allDiff ([]) = throw ()
-  | allDiff (x::xs) =
+    | allDiff (x::xs) =
       let fun f _ ([]) = return ()
-      | f ys' (y::ys) =
+        | f ys' (y::ys) =
           (case List.find (fn y' => eqv y y') ys' of
             SOME _ => zero ()
           | NONE => f (y::ys') ys)
       in f [x] xs end
   and wfModtype (ModTypeSig sl) =
       let fun wfSigbody ([]) = return ()
-      | wfSigbody (((v, v'), s)::sl') =
+        | wfSigbody (((v, v'), s)::sl') =
           wfSpec s >> bindEntry v s (wfSigbody sl')
       in allDiff (domain sl) >> wfSigbody sl end
-  | wfModtype (ModTypeFunctor (v, m1, m2)) =
+    | wfModtype (ModTypeFunctor (v, m1, m2)) =
       wfModtype m1 >> bindAbsMod v m1 (wfModtype m2)
   and wfSpec (SpecAbsMod m) = wfModtype m
-  | wfSpec (SpecManifestMod (m1, m2)) =
+    | wfSpec (SpecManifestMod (m1, m2)) =
       wfModtype m1 >> cModexpr m2 m1 >> return ()
-  | wfSpec (SpecAbsTerm m) =
+    | wfSpec (SpecAbsTerm m) =
       whptTerm m >>= (fn m' => isSort m' >> return ())
-  | wfSpec (SpecManifestTerm (m1, m2)) =
+    | wfSpec (SpecManifestTerm (m1, m2)) =
       whptTerm m2 >>= (fn m2' => Normalize.bequiv m1 m2')
   and cModexpr m m' =
-      ptModexpr m >>= (fn m'' =>
-      wfModtype m' >> subcModtype m'' m' >> return m')
+    ptModexpr m >>= (fn m'' =>
+    wfModtype m' >> subcModtype m'' m' >> return m')
   and ptModexpr m =
-      qpModexpr m >>= (fn m' =>
-      return (strModtype m m'))
+    qpModexpr m >>= (fn m' =>
+    return (strModtype m m'))
   and qpModexpr (ModStruct dl) =
-      let fun cbody ([]) = return ([])
+    let fun cbody ([]) = return ([])
       | cbody (((v1, v2), d)::dl') =
-            (case d of
-              DefVal m =>
-                ptTerm m >>= (fn m' =>
-                return [((v1, v2), SpecManifestTerm (m', m))])
-            | DefData (m, vml) =>
-                return (map (fn ((v1, v2), m') =>
-                  ((v1, v2), SpecAbsTerm m')) (((v1, v2), m)::vml))
-            | DefMod m =>
-                ptModexpr m >>= (fn m' =>
-                return [((v1, v2), SpecAbsMod m')])
-            | DefModSig (m1, m2) => 
-                cModexpr m1 m2 >> return [(((v1, v2), SpecAbsMod m2))]
-            | DefModTransparent m =>
-                ptModexpr m >>= (fn m' =>
-                return [((v1, v2), SpecManifestMod (m', m))])
-            ) >>= (fn vsl =>
-            bindMany vsl (cbody dl') >>= (fn sl =>
-            return (vsl @ sl)))
-      in cbody dl >>= (fn vsl =>
-        allDiff (domain vsl) >> return (ModTypeSig vsl)) end
-  | qpModexpr (ModFunctor (v, m1, m2)) =
+        (case d of
+          DefVal m => ptTerm m >>= (fn m' =>
+            return [((v1, v2), SpecManifestTerm (m', m))])
+        | DefData (m, vml) => return (map (fn ((v1, v2), m') =>
+            ((v1, v2), SpecAbsTerm m')) (((v1, v2), m)::vml))
+        | DefMod m => ptModexpr m >>= (fn m' =>
+          return [((v1, v2), SpecAbsMod m')])
+        | DefModSig (m1, m2) => 
+          cModexpr m1 m2 >> return [(((v1, v2), SpecAbsMod m2))]
+        | DefModTransparent m => ptModexpr m >>= (fn m' =>
+          return [((v1, v2), SpecManifestMod (m', m))])
+        ) >>= (fn vsl =>
+        bindMany vsl (cbody dl') >>= (fn sl =>
+        return (vsl @ sl)))
+    in cbody dl >>= (fn vsl =>
+      allDiff (domain vsl) >> return (ModTypeSig vsl)) end
+    | qpModexpr (ModFunctor (v, m1, m2)) =
       wfModtype m1 >> bindAbsMod v m1 (qpModexpr m2) >>= (fn m2' =>
       return (ModTypeFunctor (v, m1, m2')))
-  | qpModexpr (ModApp (m1, m2)) =
+    | qpModexpr (ModApp (m1, m2)) =
       qpModexpr m1 >>= (fn m1' =>
       Term.isFuncT m1' >>= (fn (v, m1'', m2'') =>
       cModexpr m2 m1''>>= (fn m2' =>
       return (MSub.substModtype v m2 m2''))))
-  | qpModexpr (ModPath p) =
+    | qpModexpr (ModPath p) =
       qpPath p >>= (fn s => getSpecModtype s)
   and cPath p s =
-      wfSpec s >> ptPath p >>= (fn s' => subcSpec s s' >> return s)
+    wfSpec s >> ptPath p >>= (fn s' => subcSpec s s' >> return s)
   and ptPath p =
-      qpPath p >>= (fn s => return (strSpec p s))
+    qpPath p >>= (fn s => return (strSpec p s))
   and qpPath (PVar v) = getEntry v
-  | qpPath (PPath (m, v)) =
+    | qpPath (PPath (m, v)) =
       qpModexpr m >>= (fn s =>
       Term.isSig s >>= (fn s' =>
       field (PPath (m, v)) s'))
   and gammaRestr dom ([]) = return []
-  | gammaRestr dom (((x, x'), s)::xs) =
+    | gammaRestr dom (((x, x'), s)::xs) =
       if List.exists (fn v => eqv v x) dom then
         cPath (PVar x) s >>= (fn s' =>
         gammaRestr dom xs >>= (fn xs' =>
@@ -171,80 +160,73 @@ struct
       else throw ()
   and subcModtype (ModTypeSig sl1) (ModTypeSig sl2) =
       bindMany sl1 (gammaRestr (domain sl1) sl2) >> return ()
-  | subcModtype (ModTypeFunctor (v1, m1, m2))
+    | subcModtype (ModTypeFunctor (v1, m1, m2))
                 (ModTypeFunctor (v2, m1', m2')) =
-      subcModtype m1' m1 >> bindAbsMod v1 m1' (subcModtype m2 m2') >>
-      return ()
-  | subcModtype _ _ = throw ()
+      subcModtype m1' m1 >>
+      bindAbsMod v1 m1' (subcModtype m2 m2') >> return ()
+    | subcModtype _ _ = throw ()
   and subcSpec s (SpecAbsMod m') =
       getSpecModtype s >>= (fn s' => subcModtype s' m')
-  | subcSpec (SpecManifestMod (m1, m2)) (SpecManifestMod (m1', m2')) =
+    | subcSpec (SpecManifestMod (m1, m2)) (SpecManifestMod (m1', m2')) =
       subcModtype m1 m1' >> Normalize.mequiv m2 m2'
-  | subcSpec s (SpecAbsTerm m) =
+    | subcSpec s (SpecAbsTerm m) =
       getSpecType s >>= (fn s' => Normalize.bequiv s' m)
-  | subcSpec (SpecManifestTerm (m1, m2)) (SpecManifestTerm (m1', m2')) =
+    | subcSpec (SpecManifestTerm (m1, m2)) (SpecManifestTerm (m1', m2')) =
       Normalize.bequiv m1 m1' >> Normalize.bequiv m2 m2'
-  | subcSpec _ _ = throw ()
+    | subcSpec _ _ = throw ()
   and cTerm t1 t2 =
     ptTerm t1 >>= (fn t1' => whptTerm t2 >>= (fn t2' =>
     isSort t2' >> Normalize.bequiv t2 t1'))
   and ptTerm (Path p) = qpPath p >>= (fn s => getSpecType s)
-  | ptTerm (Lit (IntLit _)) = return (Lit (IntTyLit))
-  | ptTerm (Lit (BoolLit _)) = return (Lit (BoolTyLit))
-  | ptTerm (Lit (IntTyLit)) = return (Sort TypeVal)
-  | ptTerm (Lit (BoolTyLit)) = return (Sort TypeVal)
-  | ptTerm (Sort s) = hasAxiom s >>= (fn s' => return (Sort s'))
-  | ptTerm (App (t1, t2)) =
+    | ptTerm (Lit (IntLit _)) = return (Lit (IntTyLit))
+    | ptTerm (Lit (BoolLit _)) = return (Lit (BoolTyLit))
+    | ptTerm (Lit (IntTyLit)) = return (Sort TypeVal)
+    | ptTerm (Lit (BoolTyLit)) = return (Sort TypeVal)
+    | ptTerm (Sort s) = hasAxiom s >>= (fn s' => return (Sort s'))
+    | ptTerm (App (t1, t2)) =
       whptTerm t1 >>= (fn t1' =>
       Term.isDepProduct t1' >>= (fn (v, t3, t4) =>
       cTerm t2 t3 >> return (TSub.substTerm v t2 t4)))
-  | ptTerm (Case (t1, pml)) = raise Fail ""
-  | ptTerm (IfElse (t1, t2, t3)) =
+    | ptTerm (Case (t1, pml)) = raise Fail ""
+    | ptTerm (IfElse (t1, t2, t3)) =
       ptTerm t1 >>= (fn t1' =>
       whptTerm t2 >>= (fn t2' =>
       whptTerm t3 >>= (fn t3' =>
       Normalize.bequiv t2' t3' >>
       Term.isBoolTy t1' >> return t2')))
-  | ptTerm (Let (v, t1, t2, t3)) =
+    | ptTerm (Let (v, t1, t2, t3)) =
       whptTerm t1 >>= (fn t1' => isSort t1' >>
       whptTerm t2 >>= (fn t2' =>
       Normalize.bequiv t1 t2' >>
       bindManifestTerm v t1 t2 (whptTerm t3) >>= (fn t3' =>
       return (Let (v, t1, t2, t3')))))
-  | ptTerm (Lambda (v, t1, t2)) =
+    | ptTerm (Lambda (v, t1, t2)) =
       whptTerm t1 >>= (fn t1' => isSort t1' >>
       bindAbsTerm v t1 (ptTerm t2) >>= (fn t2' =>
       ptTerm (DepProduct (v, t1, t2')) >>= (fn t3 =>
       isSort t3 >>
       return (DepProduct (v, t1, t2')))))
-  | ptTerm (DepProduct (v, t1, t2)) =
-      whptTerm t1 >>= (fn t1' =>
-      isSort t1' >>= (fn s1 =>
+    | ptTerm (DepProduct (v, t1, t2)) =
+      whptTerm t1 >>= (fn t1' => isSort t1' >>= (fn s1 =>
       bindAbsTerm v t1 (whptTerm t2) >>= (fn t2' =>
       isSort t2' >>= (fn s2 =>
-      rho s1 s2 >>= (fn s3 =>
-      return (Sort s3))))))
+      rho s1 s2 >>= (fn s3 => return (Sort s3))))))
   and whptTerm t =
     ptTerm t >>= (fn t' =>
     Normalize.whreduce t' >>= (fn t'' => return t''))
-
   fun leftmost (App (m1, m2)) = leftmost m1
-  | leftmost (Path p) = return p
-  | leftmost _ = throw ()
-
+    | leftmost (Path (PVar v)) = return v
+    | leftmost _ = throw ()
   fun getArgTypes ([]) _ = return []
-  | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
+    | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
       getArgTypes xs m2 >>= (fn m2' => return (m1::m2'))
-  | getArgTypes (x::xs) _ = throw ()
-
+    | getArgTypes (x::xs) _ = throw ()
   (* fun collectArgs (DepProduct (v, m1, m2)) =
     collectArgs m2 >>= (fn args =>
     return (m1::args))
   | collectArgs (
-
   fun wfTCType (DepProduct (v, m1, m2)) =
   | wfTCType (Sort s) = 
   *)
-
 end
 

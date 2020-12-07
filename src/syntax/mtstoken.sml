@@ -2,7 +2,7 @@ structure MTSToken = struct
   val symbolList = [#"+", #"-", #"*", #"/",
                  #"/", #"=", #">", #"<",
                  #":", #";", #".", #"|",
-                 #"_"]
+                 #"_", #"!", #"~", #"@"]
   datatype t =
       Identifier of string
     | Integer of int | Boolean of bool

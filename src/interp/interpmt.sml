@@ -10,12 +10,12 @@ signature INTERPM = sig
   val ask : env monad
   val loc : (env -> env) -> 'a monad -> 'a monad
   val throw : unit -> 'a monad
-
   val inEnv : var -> env -> bool
   val isFresh : var -> unit monad
   val bindEntry : var -> enventry -> 'a monad -> 'a monad
   val bindMany : ((var * var) * enventry) list -> 'a monad -> 'a monad
   val getEntry : var -> enventry monad
+  structure M : MONAD
 end
 
 functor InterpMT (structure S : sig
@@ -24,23 +24,23 @@ functor InterpMT (structure S : sig
   type s
   type e
   val eqv : var -> var -> bool
-end; structure M : MONAD) : INTERPM =
-struct
+end; structure M : MONAD) : INTERPM = struct
+  structure M = M
   open S
   type var = var
   type enventry = enventry
   type env = (var * enventry) list
-  structure MM = StateT (type s = s; structure M = M)
-  structure MMM = ReaderT (type s = env; structure M = MM)
-  structure MMMM = ExceptionT (type e = unit; structure M = MMM)
-  structure MMMMM = OptionT (structure M = MMMM)
-  open MMMMM
+  structure IST = StateT (type s = s; structure M = M)
+  structure IENV = ReaderT (type s = env; structure M = IST)
+  structure IEXC = ExceptionT (type e = unit; structure M = IENV)
+  structure IOPT = OptionT (structure M = IEXC)
+  open IOPT
 
-  val getstate = lift (MMMM.lift (MMM.lift MM.get))
-  val putstate = (fn st => lift (MMMM.lift (MMM.lift (MM.put st))))
-  val ask = lift (MMMM.lift MMM.ask)
-  fun loc f m = (MMM.loc f) m
-  fun throw () = MMMM.throw ()
+  val getstate = lift (IEXC.lift (IENV.lift IST.get))
+  val putstate = (fn st => lift (IEXC.lift (IENV.lift (IST.put st))))
+  val ask = lift (IEXC.lift IENV.ask)
+  fun loc f m = (IENV.loc f) m
+  fun throw () = IEXC.throw ()
   fun inEnv v e =
     List.exists (fn (v', x) => eqv v v') e
   fun isFresh v =
@@ -58,5 +58,4 @@ struct
         SOME (_, s) => return s
       | NONE => throw ())
 end
-
 

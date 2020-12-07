@@ -6,21 +6,30 @@ common/monadstate.sml
 common/monadcont.sml
 common/monadreader.sml
 common/monadexception.sml
-src/compilerm.sml
-src/mts/interpmt.sml
+
 parsercombinator/stream.sml
 parsercombinator/pc.sml
 parsercombinator/charparser.sml
+src/syntax/tokenizer.sml
 
-src/mts/lang/mts.sml
-src/mts/lang/subst.sml
-src/mts/lang/alphaequiv.sml
+src/mts/mts.sml
+src/mts/subst.sml
+src/mts/alphaequiv.sml
+
+src/compilerm.sml
 src/mtscompilerm.sml
 
-src/syntax/tokenizer.sml
-src/mtstoken.sml
+src/syntax/mtstoken.sml
 src/syntax/tokenparser.sml
 src/syntax/syntaxparser.sml
+
+src/interp/interpmt.sml
+src/interp/interpm.sml
+src/interp/term.sml
+src/interp/pseudotype.sml
+src/interp/normalize.sml
+
+src/interp/check.sml
 
 src/compiler.sml
 src/main.sml
