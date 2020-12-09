@@ -25,10 +25,6 @@ structure MTSCheck : sig
     -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
-  val leftmost : MTS.term -> MTS.var monad
-  (* val collectArgs : MTS.term -> MTS.term list monad
-  val wfTCType : MTS.term -> unit monad
-  val wfDCType : MTS.term -> unit monad *)
 end
 =
 struct
@@ -214,19 +210,4 @@ struct
   and whptTerm t =
     ptTerm t >>= (fn t' =>
     Normalize.whreduce t' >>= (fn t'' => return t''))
-  fun leftmost (App (m1, m2)) = leftmost m1
-    | leftmost (Path (PVar v)) = return v
-    | leftmost _ = throw ()
-  fun getArgTypes ([]) _ = return []
-    | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
-      getArgTypes xs m2 >>= (fn m2' => return (m1::m2'))
-    | getArgTypes (x::xs) _ = throw ()
-  (* fun collectArgs (DepProduct (v, m1, m2)) =
-    collectArgs m2 >>= (fn args =>
-    return (m1::args))
-  | collectArgs (
-  fun wfTCType (DepProduct (v, m1, m2)) =
-  | wfTCType (Sort s) = 
-  *)
 end
-

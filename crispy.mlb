@@ -1,5 +1,6 @@
 $(SML_LIB)/basis/basis.mlb
 common/common.sml
+common/set.sml
 common/monad.sml
 common/monadoption.sml
 common/monadstate.sml

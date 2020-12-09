@@ -15,6 +15,7 @@ structure MTSToken = struct
     | KWIf | KWThen | KWElse
     | KWLet | KWIn | KWEnd
     | KWInt | KWBool | KWInductive
+    | KWStructure | KWSignature | KWVal
     | EOI
   fun makeKeyword s = case s of
       "funcT" => SOME KWFuncT
