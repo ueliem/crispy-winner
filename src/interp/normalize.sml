@@ -35,6 +35,12 @@ end = struct
     | nfstep (DepProduct (v, m1, m2)) =
         (nfstep m1 >>= (fn m1' => return (DepProduct (v, m1', m2))))
       ++ (nfstep m2 >>= (fn m2' => return (DepProduct (v, m1, m2'))))
+    (* | nfstep (Inductive ((v, t), tl)) = zero ()
+    | nfstep (Constr (i, t)) =
+        (nfstep t >>= (fn t' => return (Constr (i, t'))))
+      ++ (Term.isInductive t >>= (fn (v, t, tl) =>
+        return (TSub.substTerm v t (List.nth (tl, i)))))
+        *)
   fun nfreduce m =
     (nfstep m >>= (fn m' => nfreduce m')) ++ return m
   fun whstep (Path _) = zero ()
@@ -60,6 +66,12 @@ end = struct
     | whstep (DepProduct (v, m1, m2)) =
       (whstep m1 >>= (fn m1' => return (DepProduct (v, m1', m2))))
       ++ (whstep m2 >>= (fn m2' => return (DepProduct (v, m1, m2'))))
+    (* | whstep (Inductive ((v, t), tl)) = zero ()
+    | whstep (Constr (i, t)) =
+        (whstep t >>= (fn t' => return (Constr (i, t'))))
+      ++ (Term.isInductive t >>= (fn (v, t, tl) =>
+        return (TSub.substTerm v t (List.nth (tl, i)))))
+        *)
 
   fun whreduce m =
     (whstep m >>= (fn m' => whreduce m')) ++ return m

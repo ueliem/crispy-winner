@@ -8,14 +8,15 @@ structure Term : sig
   val isSig : MTS.modtype
     -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val isFuncT : MTS.modtype -> (MTS.var * MTS.modtype * MTS.modtype) monad
+  val isInductive : MTS.term -> (MTS.var * MTS.term * MTS.term list) monad
 
-  val leftmost : MTS.term -> MTS.var monad
-  (* val collectArgs : MTS.term -> MTS.term list monad
-  val wfTCType : MTS.term -> unit monad
-  val wfDCType : MTS.term -> unit monad *)
+  val arity : MTS.term -> MTS.sort monad
+  val strictlyPositive : MTS.var -> MTS.term -> unit monad
+  val constructorForm : MTS.var -> MTS.term -> unit monad
 end = struct
   type 'a monad = 'a MTSInterpM.monad
   open MTSInterpM
+  open Util
   open MTS
   fun isLambda (Lambda (v, m1, m2)) = return (v, m1, m2)
     | isLambda _ = throw ()
@@ -31,18 +32,56 @@ end = struct
     | isSig _ = throw ()
   fun isFuncT (ModTypeFunctor (v, m1, m2)) = return (v, m1, m2)
     | isFuncT _ = throw ()
-  fun leftmost (App (m1, m2)) = leftmost m1
-    | leftmost (Path (PVar v)) = return v
-    | leftmost _ = throw ()
-  fun getArgTypes ([]) _ = return []
-    | getArgTypes (x::xs) (DepProduct (v, m1, m2)) =
-      getArgTypes xs m2 >>= (fn m2' => return (m1::m2'))
-    | getArgTypes (x::xs) _ = throw ()
-  (* fun collectArgs (DepProduct (v, m1, m2)) =
-    collectArgs m2 >>= (fn args =>
-    return (m1::args))
-  | collectArgs (
-  fun wfTCType (DepProduct (v, m1, m2)) =
-  | wfTCType (Sort s) = 
-  *)
+  fun isInductive (Inductive ((v, t), tl)) = return (v, t, tl)
+    | isInductive _ = throw ()
+  fun arity (Path p) = throw ()
+    | arity (Lit _) = throw ()
+    | arity (Sort s') = return s'
+    | arity (App (t1, t2)) = throw ()
+    | arity (Case (t, alts)) = throw ()
+    | arity (IfElse (t1, t2, t3)) = throw ()
+    | arity (Let (v, t1, t2, t3)) = throw ()
+    | arity (Lambda (v, t1, t2)) = throw ()
+    | arity (DepProduct (v, t1, t2)) = arity t2
+    | arity (Inductive _) = throw ()
+    | arity (Constr _) = throw ()
+  fun strictlyPositive c (Path (PVar v)) = 
+    if eqv c v then return () else throw ()
+    | strictlyPositive c (Path (PPath (p, v))) = throw ()
+    | strictlyPositive c (Lit _) = throw ()
+    | strictlyPositive c (Sort _) = throw ()
+    | strictlyPositive c (App (t1, t2)) = 
+      strictlyPositive c t1 >>
+      (if Set.member c (fvTerm t2) then throw () else return ())
+    | strictlyPositive c (Case (t, alts)) = throw ()
+    | strictlyPositive c (IfElse (t1, t2, t3)) = throw ()
+    | strictlyPositive c (Let (v, t1, t2, t3)) = throw ()
+    | strictlyPositive c (Lambda (v, t1, t2)) = throw ()
+    | strictlyPositive c (DepProduct (v, t1, t2)) =
+      strictlyPositive c t2 >>
+      (if Set.member c (fvTerm t1) then throw () else return ())
+    | strictlyPositive c (Inductive _) = throw ()
+    | strictlyPositive c (Constr _) = throw ()
+  fun constructorForm c (Path (PVar v)) = 
+    if eqv c v then return () else throw ()
+    | constructorForm c (Path (PPath (p, v))) = throw ()
+    | constructorForm c (Lit _) = throw ()
+    | constructorForm c (Sort _) = throw ()
+    | constructorForm c (App (t1, t2)) = 
+      constructorForm c t1 >>
+      (if Set.member c (fvTerm t2) then throw () else return ())
+    | constructorForm c (Case (t, alts)) = throw ()
+    | constructorForm c (IfElse (t1, t2, t3)) = throw ()
+    | constructorForm c (Let (v, t1, t2, t3)) = throw ()
+    | constructorForm c (Lambda (v, t1, t2)) = throw ()
+    | constructorForm c (DepProduct (AnonVar, t1, t2)) =
+      strictlyPositive c t1 >> constructorForm c t2
+    | constructorForm c (DepProduct (v, t1, t2)) =
+      (if Set.member v (fvTerm t2) then
+        constructorForm c t2 >>
+        (if Set.member c (fvTerm t1) then throw ()
+        else return ())
+      else constructorForm c t2 >> strictlyPositive c t1)
+    | constructorForm c (Inductive _) = throw ()
+    | constructorForm c (Constr _) = throw ()
 end

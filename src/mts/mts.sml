@@ -31,6 +31,8 @@ sig
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
+  | Inductive of (var * term) * term list
+  | Constr of int * term
   and def =
     DefVal of term
   | DefData of term * ((var * var) * term) list
@@ -60,6 +62,8 @@ sig
   val fvTerm : term -> var Set.set
   val fvModexpr : modexpr -> var Set.set
   val fvModtype : modtype -> var Set.set
+  val fvSpec : specification -> var Set.set
+  val fvDef : def -> var Set.set
 end
 =
 struct
@@ -94,6 +98,8 @@ struct
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
+  | Inductive of (var * term) * term list
+  | Constr of int * term
   and def =
     DefVal of term
   | DefData of term * ((var * var) * term) list
@@ -142,16 +148,40 @@ struct
         Set.remove v (Set.union (fvTerm t1) (fvTerm t2))
     | fvTerm (DepProduct (v, t1, t2)) =
         Set.remove v (Set.union (fvTerm t1) (fvTerm t2))
-  and fvModexpr (ModStruct of ((var * var) * def) list
+    | fvTerm (Inductive ((v, t1), tl)) =
+        Set.union (fvTerm t1) (foldl (fn (t', s) =>
+          Set.union s (fvTerm t')) Set.emptyset tl)
+    | fvTerm (Constr (i, t)) = fvTerm t
+  and fvModexpr (ModStruct dl) =
+    let fun f ([]) = Set.emptyset
+      | f (((v, v'), d)::dl') =
+        Set.remove v' (Set.union (f dl') (fvDef d))
+    in f dl end
     | fvModexpr (ModFunctor (v, m1, m2)) =
       Set.remove v (Set.union (fvModtype m1) (fvModexpr m2))
     | fvModexpr (ModApp (m1, m2)) =
       Set.union (fvModexpr m1) (fvModexpr m2)
     | fvModexpr (ModPath (PVar v)) = Set.singleton v
     | fvModexpr (ModPath (PPath (p, v))) = fvModexpr p
-  and fvModtype (ModTypeSig of ((var * var) * specification) list
+  and fvModtype (ModTypeSig sl) =
+    let fun f ([]) = Set.emptyset
+      | f (((v, v'), s)::sl') =
+        Set.remove v' (Set.union (f sl') (fvSpec s))
+    in f sl end
     | fvModtype (ModTypeFunctor (v, m1, m2)) =
       Set.remove v (Set.union (fvModtype m1) (fvModtype m2))
-
+  and fvSpec (SpecAbsMod m) = fvModtype m
+  | fvSpec (SpecManifestMod (m1, m2)) = Set.union (fvModtype m1) (fvModexpr m2)
+  | fvSpec (SpecAbsTerm t) = fvTerm t
+  | fvSpec (SpecManifestTerm (t1, t2)) = Set.union (fvTerm t1) (fvTerm t2)
+  and fvDef (DefVal t) = fvTerm t
+  | fvDef (DefData (t, cl)) =
+    let fun f ([]) = Set.emptyset
+      | f (((v, v'), t')::cl') =
+        Set.remove v' (Set.union (f cl') (fvTerm t'))
+    in Set.union (f cl) (fvTerm t) end
+  | fvDef (DefMod m) = fvModexpr m
+  | fvDef (DefModSig (m1, m2)) = Set.union (fvModexpr m1) (fvModtype m2)
+  | fvDef (DefModTransparent m) = fvModexpr m
 end
 

@@ -25,6 +25,9 @@ structure MTSCheck : sig
     -> ((MTS.var * MTS.var) * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
+  val cTerm : MTS.term -> MTS.term -> unit monad
+  val ptTerm : MTS.term -> MTS.term monad
+  val whptTerm : MTS.term -> MTS.term monad
 end
 =
 struct
@@ -207,6 +210,14 @@ struct
       bindAbsTerm v t1 (whptTerm t2) >>= (fn t2' =>
       isSort t2' >>= (fn s2 =>
       rho s1 s2 >>= (fn s3 => return (Sort s3))))))
+    | ptTerm (Inductive ((v, t), tl)) =
+      Term.arity t >>= (fn s =>
+      let fun f ([]) = return ()
+        | f (t'::tl') =
+          ptTerm t' >>= (fn t'' => isSort t'' >>= (fn s' =>
+          if s = s' then Term.constructorForm v t' >> f tl'
+          else throw ())) in f tl >> return t end)
+    (* | ptTerm (Constr (i, t)) = *)
   and whptTerm t =
     ptTerm t >>= (fn t' =>
     Normalize.whreduce t' >>= (fn t'' => return t''))

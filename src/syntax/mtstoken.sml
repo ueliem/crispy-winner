@@ -15,7 +15,7 @@ structure MTSToken = struct
     | KWIf | KWThen | KWElse
     | KWLet | KWIn | KWEnd
     | KWInt | KWBool | KWInductive
-    | KWStructure | KWSignature | KWVal
+    | KWModule | KWVal
     | EOI
   fun makeKeyword s = case s of
       "funcT" => SOME KWFuncT
@@ -42,6 +42,8 @@ structure MTSToken = struct
     | "true" => SOME (Boolean true)
     | "false" => SOME (Boolean false)
     | "inductive" => SOME (KWInductive)
+    | "module" => SOME (KWModule)
+    | "val" => SOME (KWVal)
     | _ => NONE
   fun makeIdentifier s = Identifier s
   fun makeInteger s = (case Int.fromString s of
@@ -79,6 +81,8 @@ structure MTSToken = struct
     | KWInt => "int"
     | KWBool => "bool"
     | KWInductive => "inductive"
+    | KWModule => "module"
+    | KWVal => "val"
     | EOI => "*EOI*")
 end
 
