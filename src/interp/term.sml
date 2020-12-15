@@ -3,16 +3,19 @@ structure Term : sig
   val isLambda : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isDepProduct : MTS.term -> (MTS.var * MTS.term * MTS.term) monad
   val isBoolTy : MTS.term -> unit monad
-  val isStruct : MTS.modexpr -> ((MTS.var * MTS.var) * MTS.def) list monad
+  val isStruct : MTS.modexpr -> (MTS.var * MTS.def) list monad
   val isFunctor : MTS.modexpr -> (MTS.var * MTS.modtype * MTS.modexpr) monad
-  val isSig : MTS.modtype
-    -> ((MTS.var * MTS.var) * MTS.specification) list monad
+  val isSig : MTS.modtype -> (MTS.var * MTS.specification) list monad
   val isFuncT : MTS.modtype -> (MTS.var * MTS.modtype * MTS.modtype) monad
   val isInductive : MTS.term -> (MTS.var * MTS.term * MTS.term list) monad
-
   val arity : MTS.term -> MTS.sort monad
   val strictlyPositive : MTS.var -> MTS.term -> unit monad
   val constructorForm : MTS.var -> MTS.term -> unit monad
+  val sigbodyContains : MTS.var -> (MTS.var * MTS.specification) list
+    -> MTS.specification monad
+  val structbodyContains : MTS.modexpr -> MTS.var
+    -> (MTS.var * MTS.def) list -> MTS.def monad
+  val structDef : MTS.path -> MTS.def monad
 end = struct
   type 'a monad = 'a MTSInterpM.monad
   open MTSInterpM
@@ -84,4 +87,19 @@ end = struct
       else constructorForm c t2 >> strictlyPositive c t1)
     | constructorForm c (Inductive _) = throw ()
     | constructorForm c (Constr _) = throw ()
+  fun sigbodyContains v sl =
+    (case List.find (fn (v', _) => eqv v v') sl of
+      SOME (_, s) => return s
+    | _ => throw ())
+  fun structbodyContains p v dl =
+    let fun f _ ([]) = throw ()
+      | f dl'' ((v', d)::dl') =
+        if eqv v v' then return ((v', d), List.rev dl'')
+        else f ((v', d)::dl'') dl'
+    in f [] dl >>= (fn ((_, d), dl') =>
+      return (foldl (fn ((v', _), d') =>
+        PSub.substDef v' (PPath (p, v')) d') d dl')) end
+  fun structDef (PPath (p, v)) =
+    isStruct p >>= (fn dl => structbodyContains p v dl)
+    | structDef (PVar v) = zero ()
 end

@@ -13,7 +13,7 @@ signature INTERPM = sig
   val inEnv : var -> env -> bool
   val isFresh : var -> unit monad
   val bindEntry : var -> enventry -> 'a monad -> 'a monad
-  val bindMany : ((var * var) * enventry) list -> 'a monad -> 'a monad
+  val bindMany : (var * enventry) list -> 'a monad -> 'a monad
   val getEntry : var -> enventry monad
   structure M : MONAD
 end
@@ -50,8 +50,8 @@ end; structure M : MONAD) : INTERPM = struct
   fun bindEntry v t =
     loc (fn e => (v, t)::e)
   fun bindMany ([]) m = m
-  | bindMany (((v, v'), s)::xs) m =
-    (bindEntry v' s (bindMany xs m))
+  | bindMany ((v, s)::xs) m =
+    (bindEntry v s (bindMany xs m))
   fun getEntry v =
     ask >>= (fn e =>
       case List.find (fn (v', x) => eqv v v') e of

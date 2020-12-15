@@ -2,22 +2,21 @@ structure PseudoType : sig
   type 'a monad = 'a MTSInterpM.monad
   val pseudoTModexpr : MTS.modexpr -> MTS.specification monad
   val pseudoTPath : MTS.path -> MTS.specification monad
+  val pseudoSpec : MTS.path -> MTS.specification monad
 end = struct
   type 'a monad = 'a MTSInterpM.monad
   open MTS
   open MTSInterpM
   fun pseudoTModexpr (ModStruct dl) =
     let fun f ([]) = return []
-      | f (((v1, v2), d)::dl') =
+      | f ((v, d)::dl') =
         (case d of
-          DefVal m => return [((v1, v2), SpecManifestTerm (m, m))]
-        | DefData (m, vml) => return (map (fn ((v1, v2), m') =>
-            ((v1, v2), SpecAbsTerm m')) (((v1, v2), m)::vml))
+          DefVal m => return [(v, SpecManifestTerm (m, m))]
         | DefMod m => pseudoTModexpr m >>= (fn m' =>
-            return [((v1, v2), m')])
-        | DefModSig (m1, m2) => return [((v1, v2), SpecAbsMod m2)]
+            return [(v, m')])
+        | DefModSig (m1, m2) => return [(v, SpecAbsMod m2)]
         | DefModTransparent m =>
-            return [((v1, v2), SpecManifestMod (ModTypeSig [], m))]
+            return [(v, SpecManifestMod (ModTypeSig [], m))]
         ) >>= (fn vsl =>
         bindMany vsl (f dl') >>= (fn sl =>
         return (vsl @ sl)))
@@ -39,4 +38,10 @@ end = struct
       getSpecModtype s >>= (fn s' =>
       Term.isSig s' >>= (fn s'' =>
       field (PPath (p, v)) s'')))
+  fun pseudoSpec (PPath (p, v)) =
+    pseudoTModexpr p >>= (fn s =>
+    getSpecModtype s >>= (fn s' =>
+    Term.isSig s' >>= (fn s'' =>
+    Term.sigbodyContains v s'')))
+    | pseudoSpec (PVar v) = zero ()
 end

@@ -43,15 +43,6 @@ struct
       else Inductive ((v, substTerm x x' t), map (substTerm x x') tl)
     | substTerm x x' (Constr (i, t)) = Constr (i, substTerm x x' t)
   and substDef x x' (DefVal m) = DefVal (substTerm x x' m)
-    | substDef x x' (DefData (m, nml)) =
-      let fun f tl'' ([]) = List.rev tl''
-        | f tl'' (((v1, v2), t)::tl') =
-            if eqv x v2 then
-              (List.rev tl'') @ (((v1, v2), t)::tl')
-            else
-              f (((v1, v2), substTerm x x' t)::tl'') tl'
-      in DefData (substTerm x x' m, f [] nml) end
-        (* DefData (substTerm x x' m, map (fn (n, m') => (n, substTerm x x' m')) nml) *)
     | substDef x x' (DefMod m) = DefMod (substModexpr x x' m)
     | substDef x x' (DefModSig (m1, m2)) =
       DefModSig (substModexpr x x' m1, substModtype x x' m2)
@@ -65,22 +56,22 @@ struct
       SpecManifestTerm (substTerm x x' m1, substTerm x x' m2)
   and substModtype x x' (ModTypeSig sl) =
     let fun f sl'' ([]) = sl''
-      | f sl'' (((v1, v2), s)::sl') =
-          if eqv x v2 then
-            (List.rev sl'') @ (((v1, v2), s)::sl')
+      | f sl'' ((v, s)::sl') =
+          if eqv x v then
+            (List.rev sl'') @ ((v, s)::sl')
           else
-            f (((v1, v2), substSpec x x' s)::sl'') sl'
+            f ((v, substSpec x x' s)::sl'') sl'
       in ModTypeSig (f [] sl) end
     | substModtype x x' (ModTypeFunctor (v, m1, m2)) =
       if eqv x v then (ModTypeFunctor (v, m1, m2))
       else ModTypeFunctor (v, substModtype x x' m1, substModtype x x' m2)
   and substModexpr x x' (ModStruct ml) =
     let fun f ml'' ([]) = ml''
-      | f ml'' (((v1, v2), d)::ml') =
-          if eqv x v2 then
-            (List.rev ml'') @ (((v1, v2), d)::ml')
+      | f ml'' ((v, d)::ml') =
+          if eqv x v then
+            (List.rev ml'') @ ((v, d)::ml')
           else
-            f (((v1, v2), substDef x x' d)::ml'') ml'
+            f ((v, substDef x x' d)::ml'') ml'
       in ModStruct (f [] ml) end
     | substModexpr x x' (ModFunctor (v, m1, m2)) =
       if eqv x v then (ModFunctor (v, m1, m2))

@@ -7,7 +7,7 @@ structure SyntaxParser : sig
   val ptsSort : MTS.term monad
   val annotatedBinder : unit -> (MTS.var * MTS.term) monad
   val path : unit -> MTS.path monad
-  val def : unit -> MTS.def monad
+  val def : unit -> (MTS.var * MTS.def) list monad
   val specification : unit -> MTS.specification monad
   val ptsTerm : unit -> MTS.term monad
   val ptsPath : unit -> MTS.term monad
@@ -45,17 +45,23 @@ end = struct
   and path () = (binder >>= (fn v => return (MTS.PVar v)))
     ++ (modExpr () >>= (fn m => period >> binder >>= (fn v =>
       return (MTS.PPath (m, v)))))
-  and def _ = (ptsTerm () >>= (fn t => return (MTS.DefVal t)))
-  ++ (kwInductive >> colon >> ptsTerm () >>= (fn t =>
-    defined >> many (binder >>= (fn v' =>
-    colon >> ptsTerm () >>= (fn t' => semicolon >>
-    return ((v', v'), t')))) >>= (fn vtl =>
-    return (MTS.DefData (t, vtl)))))
-  ++ (modExpr () >>= (fn m => return (MTS.DefMod m)))
-  ++ (modExpr () >>= (fn m1 => colon >> modType () >>= (fn m2 =>
-    return (MTS.DefModSig (m1, m2)))))
-  ++ (kwTransparent >> modExpr () >>= (fn m =>
-    return (MTS.DefModTransparent m)))
+  and def _ = (kwVal >> binder >>= (fn v => defined >>
+    ptsTerm () >>= (fn t => return [(v, MTS.DefVal t)])))
+    ++ (kwModule >> binder >>= (fn v => defined >>
+      (kwTransparent >> modExpr () >>= (fn m =>
+        return [(v, MTS.DefModTransparent m)]))
+      ++ (modExpr () >>= (fn m1 => colon >> modType () >>= (fn m2 =>
+        return [(v, MTS.DefModSig (m1, m2))])))
+      ++ (modExpr () >>= (fn m => return [(v, MTS.DefMod m)]))))
+    ++ (kwInductive >> binder >>= (fn v => colon >>
+      ptsTerm () >>= (fn t => defined >>
+      many (pipe >> binder >>= (fn v' =>
+      colon >> ptsTerm () >>= (fn t' => return (v', t')))) >>= (fn dcl =>
+      let val (vs, ts) = ListPair.unzip dcl in
+        return ((v, MTS.DefVal (MTS.Inductive ((v, t), ts)))
+          ::(List.tabulate (List.length dcl,
+            (fn i => (List.nth (vs, i), MTS.DefVal
+              (MTS.Constr (i, MTS.Path (MTS.PVar v))))))))end))))
   and specification _ =
     (ptsTerm () >>= (fn t => return (MTS.SpecAbsTerm t)))
     ++ (ptsTerm () >>= (fn t1 => defined >> ptsTerm () >>= (fn t2 =>
@@ -91,9 +97,8 @@ end = struct
     return (MTS.DepProduct (v, t1, t2))))
   and modExpr _ =
     modStruct () ++ modFunctor () ++ modApp () ++ modPath ()
-  and modStruct _ = kwStruct >> many (binder >>= (fn v =>
-    defined >> def () >>= (fn d => semicolon >>
-    return ((v, v), d)))) >>= (fn vdl => return (MTS.ModStruct vdl))
+  and modStruct _ = kwStruct >> many (def ()) >>= (fn vdl =>
+    kwEnd >> return (MTS.ModStruct (List.concat vdl)))
   and modFunctor _ = kwFunctor >> lpar >> binder >>= (fn v => colon >>
     modType () >>= (fn m1 => rpar >> rightarrow >>
     modExpr () >>= (fn m2 => return (MTS.ModFunctor (v, m1, m2)))))
@@ -103,7 +108,7 @@ end = struct
   and modType _ = modSig () ++ modFuncT ()
   and modSig _ = kwSig >> many (binder >>= (fn v =>
     colon >> specification () >>= (fn s => semicolon >>
-    return ((v, v), s)))) >>= (fn vsl => return (MTS.ModTypeSig vsl))
+    return (v, s)))) >>= (fn vsl => kwEnd >> return (MTS.ModTypeSig vsl))
   and modFuncT _ = kwFuncT >> lpar >> binder >>= (fn v => colon >>
     modType () >>= (fn m1 => rpar >> rightarrow >>
     modType () >>= (fn m2 => return (MTS.ModTypeFunctor (v, m1, m2)))))

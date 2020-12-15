@@ -12,11 +12,13 @@ structure MTSInterpM : sig
   val getSorts : unit -> MTS.sorts monad
   val getAxioms : unit -> MTS.ax monad
   val getRules : unit -> MTS.rules monad
-  val getSpecType : MTS.specification -> MTS.term monad
-  val getSpecModtype : MTS.specification -> MTS.modtype monad
   val getDefModexpr : MTS.def -> MTS.modexpr monad
   val getDefTerm : MTS.def -> MTS.term monad
-  val field : MTS.path -> ((MTS.var * MTS.var) * MTS.specification) list
+  val getSpecTerm : MTS.specification -> MTS.term monad
+  val getSpecType : MTS.specification -> MTS.term monad
+  val getSpecModexpr : MTS.specification -> MTS.modexpr monad
+  val getSpecModtype : MTS.specification -> MTS.modtype monad
+  val field : MTS.path -> (MTS.var * MTS.specification) list
     -> MTS.specification monad
   structure Util : MUTIL
 end = struct
@@ -48,18 +50,24 @@ end = struct
   fun bindAbsMod v m = bindEntry v (SpecAbsMod m)
   fun bindManifestMod v m1 m2 = bindEntry v (SpecManifestMod (m1, m2))
   fun getDefModexpr (DefVal m) = throw ()
-    | getDefModexpr (DefData _) = throw ()
     | getDefModexpr (DefMod m) = return m
     | getDefModexpr (DefModSig (m1, m2)) = return m1
     | getDefModexpr (DefModTransparent m) = return m
   fun getDefTerm (DefVal m) = return m
-    | getDefTerm (DefData _) = throw ()
     | getDefTerm (DefMod m) = throw ()
     | getDefTerm (DefModSig (m1, m2)) = throw ()
     | getDefTerm (DefModTransparent m) = throw ()
+  fun getSpecTerm s =
+    (case s of
+      SpecManifestTerm (_, m) => return m
+    | _ => throw ())
   fun getSpecType s = (case s of
       SpecAbsTerm m => return m
     | SpecManifestTerm (m, _) => return m
+    | _ => throw ())
+  fun getSpecModexpr s =
+    (case s of
+      SpecManifestMod (_, m) => return m
     | _ => throw ())
   fun getSpecModtype s =
     (case s of
@@ -68,9 +76,9 @@ end = struct
     | _ => throw ())
   fun field _ ([]) = throw ()
     | field (PVar _) _ = throw ()
-    | field (PPath (p, v)) (((x', _), s)::xs) =
-      if eqv v x' then return s
+    | field (PPath (p, v)) ((x, s)::xs) =
+      if eqv v x then return s
       else field (PPath (p, v))
-        (map (fn ((x'', x'''), s') => ((x'', x'''), PSub.substSpec x'
-          (PPath (p, x')) s')) xs)
+        (map (fn (x', s') => (x', PSub.substSpec x
+          (PPath (p, x)) s')) xs)
 end

@@ -9,7 +9,7 @@ structure MTSCheck : sig
   val rho : MTS.sort -> MTS.sort -> MTS.sort monad
   val strSpec : MTS.path -> MTS.specification -> MTS.specification
   val strModtype : MTS.modexpr -> MTS.modtype -> MTS.modtype
-  val domain : ((MTS.var * MTS.var) * MTS.specification) list
+  val domain : (MTS.var * MTS.specification) list
     -> MTS.var list
   val allDiff : MTS.var list -> unit monad
   val wfModtype : MTS.modtype -> unit monad
@@ -21,8 +21,8 @@ structure MTSCheck : sig
   val ptPath : MTS.path -> MTS.specification monad
   val qpPath : MTS.path -> MTS.specification monad
   val gammaRestr : MTS.var list
-    -> ((MTS.var * MTS.var) * MTS.specification) list
-    -> ((MTS.var * MTS.var) * MTS.specification) list monad
+    -> (MTS.var * MTS.specification) list
+    -> (MTS.var * MTS.specification) list monad
   val subcModtype : MTS.modtype -> MTS.modtype -> unit monad
   val subcSpec : MTS.specification -> MTS.specification -> unit monad
   val cTerm : MTS.term -> MTS.term -> unit monad
@@ -79,11 +79,11 @@ struct
     | strSpec m' (SpecManifestTerm (m1, m2)) =
       SpecManifestTerm (m1, m2)
   and strModtype m' (ModTypeSig sl) =
-      ModTypeSig (map (fn ((v, v'), s) =>
-        ((v, v'), strSpec (PPath (m', v)) s)) sl)
+      ModTypeSig (map (fn (v, s) =>
+        (v, strSpec (PPath (m', v)) s)) sl)
     | strModtype m' (ModTypeFunctor (v, m1, m2)) =
       ModTypeFunctor (v, m1, strModtype (ModApp (m', ModPath (PVar v))) m2)
-  fun domain sl = (#1 (ListPair.unzip (#1 (ListPair.unzip sl))))
+  fun domain sl = (#1 (ListPair.unzip sl))
   and allDiff ([]) = throw ()
     | allDiff (x::xs) =
       let fun f _ ([]) = return ()
@@ -94,7 +94,7 @@ struct
       in f [x] xs end
   and wfModtype (ModTypeSig sl) =
       let fun wfSigbody ([]) = return ()
-        | wfSigbody (((v, v'), s)::sl') =
+        | wfSigbody ((v, s)::sl') =
           wfSpec s >> bindEntry v s (wfSigbody sl')
       in allDiff (domain sl) >> wfSigbody sl end
     | wfModtype (ModTypeFunctor (v, m1, m2)) =
@@ -114,18 +114,16 @@ struct
     return (strModtype m m'))
   and qpModexpr (ModStruct dl) =
     let fun cbody ([]) = return ([])
-      | cbody (((v1, v2), d)::dl') =
+      | cbody ((v, d)::dl') =
         (case d of
           DefVal m => ptTerm m >>= (fn m' =>
-            return [((v1, v2), SpecManifestTerm (m', m))])
-        | DefData (m, vml) => return (map (fn ((v1, v2), m') =>
-            ((v1, v2), SpecAbsTerm m')) (((v1, v2), m)::vml))
+            return [(v, SpecManifestTerm (m', m))])
         | DefMod m => ptModexpr m >>= (fn m' =>
-          return [((v1, v2), SpecAbsMod m')])
+          return [(v, SpecAbsMod m')])
         | DefModSig (m1, m2) => 
-          cModexpr m1 m2 >> return [(((v1, v2), SpecAbsMod m2))]
+          cModexpr m1 m2 >> return [((v, SpecAbsMod m2))]
         | DefModTransparent m => ptModexpr m >>= (fn m' =>
-          return [((v1, v2), SpecManifestMod (m', m))])
+          return [(v, SpecManifestMod (m', m))])
         ) >>= (fn vsl =>
         bindMany vsl (cbody dl') >>= (fn sl =>
         return (vsl @ sl)))
@@ -151,11 +149,11 @@ struct
       Term.isSig s >>= (fn s' =>
       field (PPath (m, v)) s'))
   and gammaRestr dom ([]) = return []
-    | gammaRestr dom (((x, x'), s)::xs) =
+    | gammaRestr dom ((x, s)::xs) =
       if List.exists (fn v => eqv v x) dom then
         cPath (PVar x) s >>= (fn s' =>
         gammaRestr dom xs >>= (fn xs' =>
-        return (((x, x'), s')::xs')))
+        return ((x, s')::xs')))
       else throw ()
   and subcModtype (ModTypeSig sl1) (ModTypeSig sl2) =
       bindMany sl1 (gammaRestr (domain sl1) sl2) >> return ()
@@ -217,8 +215,18 @@ struct
           ptTerm t' >>= (fn t'' => isSort t'' >>= (fn s' =>
           if s = s' then Term.constructorForm v t' >> f tl'
           else throw ())) in f tl >> return t end)
-    (* | ptTerm (Constr (i, t)) = *)
+    | ptTerm (Constr (i, Path p)) = 
+      ptPath p >>= (fn s => (case s of
+        SpecAbsMod _ => throw ()
+      | SpecManifestMod _ => throw ()
+      | SpecAbsTerm _ => throw ()
+      | SpecManifestTerm (_, Inductive ((v, t), cl)) =>
+        return (List.nth (cl, i))
+      | SpecManifestTerm (_, _) => throw ()))
+    | ptTerm (Constr (i, Inductive ((v, t), cl))) =
+      return (List.nth (cl, i))
+    | ptTerm (Constr (i, _)) = throw ()
   and whptTerm t =
-    ptTerm t >>= (fn t' =>
-    Normalize.whreduce t' >>= (fn t'' => return t''))
+    ptTerm t >>= (fn t' => Normalize.termreduce 
+      Normalize.WeakHeadNormalForm t' >>= (fn t'' => return t''))
 end

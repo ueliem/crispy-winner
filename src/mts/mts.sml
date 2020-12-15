@@ -35,12 +35,11 @@ sig
   | Constr of int * term
   and def =
     DefVal of term
-  | DefData of term * ((var * var) * term) list
   | DefMod of modexpr
   | DefModSig of modexpr * modtype
   | DefModTransparent of modexpr
   and modtype =
-    ModTypeSig of ((var * var) * specification) list
+    ModTypeSig of (var * specification) list
   | ModTypeFunctor of var * modtype * modtype
   and specification =
     SpecAbsMod of modtype
@@ -48,7 +47,7 @@ sig
   | SpecAbsTerm of term
   | SpecManifestTerm of term * term
   and modexpr =
-    ModStruct of ((var * var) * def) list
+    ModStruct of (var * def) list
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
   | ModPath of path
@@ -102,12 +101,11 @@ struct
   | Constr of int * term
   and def =
     DefVal of term
-  | DefData of term * ((var * var) * term) list
   | DefMod of modexpr
   | DefModSig of modexpr * modtype
   | DefModTransparent of modexpr
   and modtype =
-    ModTypeSig of ((var * var) * specification) list
+    ModTypeSig of (var * specification) list
   | ModTypeFunctor of var * modtype * modtype
   and specification =
     SpecAbsMod of modtype
@@ -115,7 +113,7 @@ struct
   | SpecAbsTerm of term
   | SpecManifestTerm of term * term
   and modexpr =
-    ModStruct of ((var * var) * def) list
+    ModStruct of (var * def) list
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
   | ModPath of path
@@ -154,8 +152,8 @@ struct
     | fvTerm (Constr (i, t)) = fvTerm t
   and fvModexpr (ModStruct dl) =
     let fun f ([]) = Set.emptyset
-      | f (((v, v'), d)::dl') =
-        Set.remove v' (Set.union (f dl') (fvDef d))
+      | f ((v, d)::dl') =
+        Set.remove v (Set.union (f dl') (fvDef d))
     in f dl end
     | fvModexpr (ModFunctor (v, m1, m2)) =
       Set.remove v (Set.union (fvModtype m1) (fvModexpr m2))
@@ -165,8 +163,8 @@ struct
     | fvModexpr (ModPath (PPath (p, v))) = fvModexpr p
   and fvModtype (ModTypeSig sl) =
     let fun f ([]) = Set.emptyset
-      | f (((v, v'), s)::sl') =
-        Set.remove v' (Set.union (f sl') (fvSpec s))
+      | f ((v, s)::sl') =
+        Set.remove v (Set.union (f sl') (fvSpec s))
     in f sl end
     | fvModtype (ModTypeFunctor (v, m1, m2)) =
       Set.remove v (Set.union (fvModtype m1) (fvModtype m2))
@@ -175,11 +173,6 @@ struct
   | fvSpec (SpecAbsTerm t) = fvTerm t
   | fvSpec (SpecManifestTerm (t1, t2)) = Set.union (fvTerm t1) (fvTerm t2)
   and fvDef (DefVal t) = fvTerm t
-  | fvDef (DefData (t, cl)) =
-    let fun f ([]) = Set.emptyset
-      | f (((v, v'), t')::cl') =
-        Set.remove v' (Set.union (f cl') (fvTerm t'))
-    in Set.union (f cl) (fvTerm t) end
   | fvDef (DefMod m) = fvModexpr m
   | fvDef (DefModSig (m1, m2)) = Set.union (fvModexpr m1) (fvModtype m2)
   | fvDef (DefModTransparent m) = fvModexpr m

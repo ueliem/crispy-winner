@@ -41,6 +41,8 @@ functor TokenParser (structure M : MONAD) : sig
   val kwInt : unit monad
   val kwBool : unit monad
   val kwInductive : unit monad
+  val kwModule : unit monad
+  val kwVal : unit monad
   val tokenEOI : unit monad
 end = struct
   structure TP = ParserT (
@@ -117,6 +119,10 @@ end = struct
     case x of MTSToken.KWFuncT => return () | _ => zero ())
   val kwInductive = next >>= (fn (p, x) =>
     case x of MTSToken.KWInductive => return () | _ => zero ())
+  val kwModule = next >>= (fn (p, x) =>
+    case x of MTSToken.KWModule => return () | _ => zero ())
+  val kwVal = next >>= (fn (p, x) =>
+    case x of MTSToken.KWVal => return () | _ => zero ())
   val tokenEOI = next >>= (fn (p, x) =>
     case x of MTSToken.EOI => return () | _ => zero ())
 end
