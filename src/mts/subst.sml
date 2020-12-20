@@ -23,10 +23,9 @@ struct
     | substTerm x x' (Sort s) = Sort s
     | substTerm x x' (App (m1, m2)) =
       App (substTerm x x' m1, substTerm x x' m2)
-    | substTerm x x' (Case (m, pml)) =
-      Case (substTerm x x' m, map (fn (c, vs, m') =>
-        if List.exists (fn v => eqv v x) vs then (c, vs, m')
-        else (c, vs, substTerm x x' m')) pml)
+    | substTerm x x' (Case (m1, m2, pml)) =
+      Case (substTerm x x' m1, substTerm x x' m2,
+        map (fn m => substTerm x x' m) pml)
     | substTerm x x' (IfElse (m1, m2, m3)) =
       IfElse (substTerm x x' m1, substTerm x x' m2, substTerm x x' m3)
     | substTerm x x' (Let (v, m1, m2, m3)) =

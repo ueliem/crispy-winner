@@ -34,9 +34,9 @@ end = struct
       (termstep str m1 >>= (fn m1' => return (App (m1', m2))))
       ++ (Term.isLambda m1 >>= (fn (v, m3, m4) =>
         return (TSub.substTerm v m2 m4)))
-    | termstep str (Case (m, pml)) =
+    (* | termstep str (Case (m, pml)) =
       (termstep str m >>= (fn m' => return (Case (m', pml))))
-      ++ (return (raise Fail ""))
+      ++ (return (raise Fail "")) *)
     | termstep str (IfElse (m1, m2, m3)) =
       (termstep str m1 >>= (fn m1' => return (IfElse (m1', m2, m3))))
       ++ (termstep str m2 >>= (fn m2' => return (IfElse (m1, m2', m3))))

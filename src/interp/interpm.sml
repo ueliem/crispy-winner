@@ -23,11 +23,9 @@ structure MTSInterpM : sig
   structure Util : MUTIL
 end = struct
   structure InterpM = InterpMT (structure S = struct
-    type var = MTS.var
     type enventry = MTS.specification
     type s = MTS.sorts * MTS.ax * MTS.rules
     type e = unit
-    val eqv = MTS.eqv
   end; structure M = MTSCompilerM)
   structure Util = MUtil (structure M = InterpM)
   open InterpM

@@ -10,30 +10,30 @@ signature INTERPM = sig
   val ask : env monad
   val loc : (env -> env) -> 'a monad -> 'a monad
   val throw : unit -> 'a monad
+  val newvar : var monad
   val inEnv : var -> env -> bool
   val isFresh : var -> unit monad
   val bindEntry : var -> enventry -> 'a monad -> 'a monad
   val bindMany : (var * enventry) list -> 'a monad -> 'a monad
   val getEntry : var -> enventry monad
-  structure M : MONAD
 end
 
 functor InterpMT (structure S : sig
-  type var
   type enventry
   type s
   type e
-  val eqv : var -> var -> bool
-end; structure M : MONAD) : INTERPM = struct
-  structure M = M
-  open S
-  type var = var
-  type enventry = enventry
+end; structure M : COMPILERM) : INTERPM = struct
+  type var = M.var
+  type enventry = S.enventry
   type env = (var * enventry) list
+  type s = S.s
+  val eqv = M.eqv
+  structure M = M
   structure IST = StateT (type s = s; structure M = M)
   structure IENV = ReaderT (type s = env; structure M = IST)
   structure IEXC = ExceptionT (type e = unit; structure M = IENV)
   structure IOPT = OptionT (structure M = IEXC)
+  val newvar = IOPT.lift (IEXC.lift (IENV.lift (IST.lift M.newvar)))
   open IOPT
 
   val getstate = lift (IEXC.lift (IENV.lift IST.get))

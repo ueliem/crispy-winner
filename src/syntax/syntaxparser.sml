@@ -80,7 +80,7 @@ end = struct
     rightarrow >> ptsTerm () >>= (fn t' => return (c, vs, t'))))
     in kwCase >> ptsTerm () >>= (fn t => kwOf >>
       ptsAlt () >>= (fn x => many1 (pipe >> ptsAlt ()) >>= (fn xs =>
-      return (MTS.Case (t, x::xs))))) end
+      (* return (MTS.Case (t, x::xs)) *) raise Fail ""))) end
   and ptsIfElse () = kwIf >> ptsTerm () >>= (fn t1 =>
     kwThen >> ptsTerm () >>= (fn t2 =>
     kwElse >> ptsTerm () >>= (fn t3 =>

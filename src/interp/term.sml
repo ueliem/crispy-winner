@@ -7,6 +7,7 @@ structure Term : sig
   val isFunctor : MTS.modexpr -> (MTS.var * MTS.modtype * MTS.modexpr) monad
   val isSig : MTS.modtype -> (MTS.var * MTS.specification) list monad
   val isFuncT : MTS.modtype -> (MTS.var * MTS.modtype * MTS.modtype) monad
+  val isConstr : MTS.term -> (int * MTS.term) monad
   val isInductive : MTS.term -> (MTS.var * MTS.term * MTS.term list) monad
   val arity : MTS.term -> MTS.sort monad
   val strictlyPositive : MTS.var -> MTS.term -> unit monad
@@ -35,16 +36,18 @@ end = struct
     | isSig _ = throw ()
   fun isFuncT (ModTypeFunctor (v, m1, m2)) = return (v, m1, m2)
     | isFuncT _ = throw ()
+  fun isConstr (Constr (i, t)) = return (i, t)
+    | isConstr _ = throw ()
   fun isInductive (Inductive ((v, t), tl)) = return (v, t, tl)
     | isInductive _ = throw ()
   fun arity (Path p) = throw ()
     | arity (Lit _) = throw ()
     | arity (Sort s') = return s'
-    | arity (App (t1, t2)) = throw ()
-    | arity (Case (t, alts)) = throw ()
-    | arity (IfElse (t1, t2, t3)) = throw ()
-    | arity (Let (v, t1, t2, t3)) = throw ()
-    | arity (Lambda (v, t1, t2)) = throw ()
+    | arity (App _) = throw ()
+    | arity (Case _) = throw ()
+    | arity (IfElse _) = throw ()
+    | arity (Let _) = throw ()
+    | arity (Lambda _) = throw ()
     | arity (DepProduct (v, t1, t2)) = arity t2
     | arity (Inductive _) = throw ()
     | arity (Constr _) = throw ()
@@ -56,10 +59,10 @@ end = struct
     | strictlyPositive c (App (t1, t2)) = 
       strictlyPositive c t1 >>
       (if Set.member c (fvTerm t2) then throw () else return ())
-    | strictlyPositive c (Case (t, alts)) = throw ()
-    | strictlyPositive c (IfElse (t1, t2, t3)) = throw ()
-    | strictlyPositive c (Let (v, t1, t2, t3)) = throw ()
-    | strictlyPositive c (Lambda (v, t1, t2)) = throw ()
+    | strictlyPositive c (Case _) = throw ()
+    | strictlyPositive c (IfElse _) = throw ()
+    | strictlyPositive c (Let _) = throw ()
+    | strictlyPositive c (Lambda _) = throw ()
     | strictlyPositive c (DepProduct (v, t1, t2)) =
       strictlyPositive c t2 >>
       (if Set.member c (fvTerm t1) then throw () else return ())
@@ -73,10 +76,10 @@ end = struct
     | constructorForm c (App (t1, t2)) = 
       constructorForm c t1 >>
       (if Set.member c (fvTerm t2) then throw () else return ())
-    | constructorForm c (Case (t, alts)) = throw ()
-    | constructorForm c (IfElse (t1, t2, t3)) = throw ()
-    | constructorForm c (Let (v, t1, t2, t3)) = throw ()
-    | constructorForm c (Lambda (v, t1, t2)) = throw ()
+    | constructorForm c (Case _) = throw ()
+    | constructorForm c (IfElse _) = throw ()
+    | constructorForm c (Let _) = throw ()
+    | constructorForm c (Lambda _) = throw ()
     | constructorForm c (DepProduct (AnonVar, t1, t2)) =
       strictlyPositive c t1 >> constructorForm c t2
     | constructorForm c (DepProduct (v, t1, t2)) =

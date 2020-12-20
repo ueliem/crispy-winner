@@ -28,6 +28,7 @@ structure MTSCheck : sig
   val cTerm : MTS.term -> MTS.term -> unit monad
   val ptTerm : MTS.term -> MTS.term monad
   val whptTerm : MTS.term -> MTS.term monad
+  val lrsub : MTS.var -> MTS.term -> MTS.term -> MTS.term -> MTS.term -> MTS.term monad
 end
 =
 struct
@@ -184,7 +185,16 @@ struct
       whptTerm t1 >>= (fn t1' =>
       Term.isDepProduct t1' >>= (fn (v, t3, t4) =>
       cTerm t2 t3 >> return (TSub.substTerm v t2 t4)))
-    | ptTerm (Case (t1, pml)) = raise Fail ""
+    | ptTerm (Case (t1, t2, pml)) = raise Fail ""
+(*
+    TWO cases:
+      t2 type is dep product leading to sort
+
+
+      t2 type is nondepedent function of dep product args returning I applied to
+      args, returning a sort
+
+      *)
     | ptTerm (IfElse (t1, t2, t3)) =
       ptTerm t1 >>= (fn t1' =>
       whptTerm t2 >>= (fn t2' =>
@@ -212,21 +222,46 @@ struct
       Term.arity t >>= (fn s =>
       let fun f ([]) = return ()
         | f (t'::tl') =
-          ptTerm t' >>= (fn t'' => isSort t'' >>= (fn s' =>
+          bindAbsTerm v t (ptTerm t') >>= (fn t'' => isSort t'' >>= (fn s' =>
           if s = s' then Term.constructorForm v t' >> f tl'
           else throw ())) in f tl >> return t end)
-    | ptTerm (Constr (i, Path p)) = 
-      ptPath p >>= (fn s => (case s of
-        SpecAbsMod _ => throw ()
-      | SpecManifestMod _ => throw ()
-      | SpecAbsTerm _ => throw ()
-      | SpecManifestTerm (_, Inductive ((v, t), cl)) =>
-        return (List.nth (cl, i))
-      | SpecManifestTerm (_, _) => throw ()))
-    | ptTerm (Constr (i, Inductive ((v, t), cl))) =
-      return (List.nth (cl, i))
-    | ptTerm (Constr (i, _)) = throw ()
+    | ptTerm (Constr (i, t)) = 
+      ptTerm t >>= (fn t' =>
+      Term.isInductive t' >>= (fn (v, t, tl) =>
+      ptTerm t' >>= (fn _ =>
+      return (TSub.substTerm v t' (List.nth (tl, i))))))
   and whptTerm t =
     ptTerm t >>= (fn t' => Normalize.termreduce 
       Normalize.WeakHeadNormalForm t' >>= (fn t'' => return t''))
+
+  and lrsub x i q r' c =
+    let fun f r (DepProduct (AnonVar, m1, m2)) =
+      newvar >>= (fn (v : MTS.var) =>
+      f (App (r, Path (PVar v))) m2 >>= (fn m2' =>
+      return (DepProduct (v, TSub.substTerm x i m1, m2'))))
+      | f r (DepProduct (NamedVar v, m1, m2)) =
+        f (App (r, Path (PVar (NamedVar v)))) m2 >>= (fn m2' =>
+        return (DepProduct (NamedVar v, TSub.substTerm x i m1, m2')))
+      | f r (App (m1, m2)) =
+        f r m1 >>= (fn m1' => return (App (App (m1', m2), r)))
+      | f r (Path (PVar v)) =
+        if eqv x v then return q else throw ()
+      | f r (Path (PPath (p, v))) = raise Fail ""
+      | f _ _ = throw ()
+    in f r' c end
+
+  (* and lrsub x i q r (DepProduct (AnonVar, m1, m2)) =
+    newvar >>= (fn v =>
+      f i q (App (r, Path (PVar v))) m2 >>= (fn m2' =>
+      return (DepProduct (v, TSub.substTerm x i m1, m2'))))
+    
+    | lrsub x i q r (DepProduct (NamedVar v, m1, m2)) =
+      lrsub x i q (App (r, Path (PVar v))) >>= (fn m2' =>
+        return (DepProduct (v, TSub.substTerm x i m1, m2')))
+    | lrsub x i q (App (m1, m2)) =
+      lrsub x i q m1 >>= (fn m1' => return (App (m1', m2)))
+    | lrsub x i q (Path (PVar v)) =
+      if eqv x v then return q else throw ()
+    | lrsub x i q (Path (PPath (p, v))) = raise Fail ""
+    *)
 end

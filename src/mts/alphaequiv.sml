@@ -11,9 +11,9 @@ struct
   | eq (Lit l) (Lit l') = l = l'
   | eq (Sort s) (Sort s') = s = s'
   | eq (App (m1, m2)) (App (m1', m2')) = eq m1 m1' andalso eq m2 m2'
-  | eq (Case (m, pml)) (Case (m', pml')) =
-      eq m m' andalso foldl (fn (((c, vs, m1), (c', vs', m1')), x) => 
-        x andalso eqv c c' andalso eqvs vs vs' andalso eq m1 m1')
+  | eq (Case (m1, m2, pml)) (Case (m1', m2', pml')) =
+      eq m1 m1' andalso eq m2 m2'
+      andalso foldl (fn ((m, m'), x) => x andalso eq m m')
         true (ListPair.zipEq (pml, pml'))
   | eq (IfElse (m1, m2, m3)) (IfElse (m1', m2', m3')) =
       eq m1 m1' andalso eq m2 m2' andalso eq m3 m3'
