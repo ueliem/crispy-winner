@@ -1,6 +1,7 @@
 structure Compiler : sig
   val loadFile : string -> CharFileStream.stream MTSCompilerM.monad
-  val tokenizeStream : CharFileStream.stream -> MTSTokenizer.TokenStream.stream MTSCompilerM.monad
+  val tokenizeStream : CharFileStream.stream
+    -> TokenStream.stream MTSCompilerM.monad
   val compile : string -> unit MTSCompilerM.monad
 end = struct
   open MTSCompilerM
@@ -10,9 +11,10 @@ end = struct
   fun tokenizeStream cvs =
     MTSTokenizer.tokenize cvs >>= (fn (r, _) =>
     (case r of
-      MTSTokenizer.CP.PEXC.ExcVal (SOME tl) => return (MTSTokenizer.TokenStream.fromList tl)
-    | MTSTokenizer.CP.PEXC.ExcVal NONE => throw ()
-    | MTSTokenizer.CP.PEXC.ExcErr e => throw ()))
+      MTSCFP.PEXC.ExcVal (SOME tl) =>
+        return (TokenStream.fromList tl)
+    | MTSCFP.PEXC.ExcVal NONE => throw ()
+    | MTSCFP.PEXC.ExcErr e => throw ()))
   fun parseStream tvs =
     SyntaxParser.ptsTerm () tvs >>= (fn (r, _) =>
     (case r of

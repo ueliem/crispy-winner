@@ -1,0 +1,10 @@
+$(SML_LIB)/basis/basis.mlb
+common.sml
+set.sml
+monad.sml
+monadoption.sml
+monadstate.sml
+monadcont.sml
+monadreader.sml
+monadexception.sml
+

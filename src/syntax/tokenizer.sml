@@ -1,34 +1,30 @@
-structure TErr = struct
-  type err = unit
-  type pos = CharFileStream.pos
-  type elem = CharFileStream.item
+structure TokenVector : sig
+  type item = MTSCFP.S.pos * MTSToken.t
+  include MONO_VECTOR where type elem = item
+end = struct
+  open Vector
+  type item = MTSCFP.S.pos * MTSToken.t
+  type elem = item
+  type vector = item vector
 end
 
-signature TOKEN = sig
-  eqtype t
-  val symbolList : char list
-  val makeKeyword : string -> t option
-  val makeIdentifier : string -> t
-  val makeSymbol : string -> t
-  val makeInteger : string -> t option
-  val makeLPar : unit -> t
-  val makeRPar : unit -> t
-  val stringOf : t -> string
+structure TokenStream : sig
+  include STREAM where type item = TokenVector.item
+  val fromList : item list -> stream
+end = struct
+  structure TS = MonoVectorStream (structure S = TokenVector;
+    val eq = (fn (x, y) => x = y);
+    val stringOfPos = (fn p => Int.toString p);
+    val stringOfElem = (fn (p, t) => MTSToken.stringOf t))
+  open TS
+  fun fromList l = { s = (TokenVector.fromList l), pos = 0 }
 end
 
-functor Tokenizer (structure T : TOKEN;
-  structure TE : sig include ERR where type elem = char end;
-  structure CP : sig
-    include CHARPARSER
-    structure M : MONAD
-  end) : sig
+structure MTSTokenizer : sig
   include CHARPARSER
   structure M : MONAD
-  structure TE : sig include ERR where type elem = char end;
-  structure T : TOKEN;
-  structure CP : CHARPARSER
-  type t = T.t
-  type tok = CP.S.pos * t
+  type t = MTSToken.t
+  type tok = TokenStream.item
   val whitespace : char list monad
   val keyword : t monad
   val ident : t monad
@@ -38,22 +34,13 @@ functor Tokenizer (structure T : TOKEN;
   val rightpar : t monad
   val token : tok monad
   val tokenize : tok list monad
-  structure TokenVector : sig
-    include MONO_VECTOR
-    eqtype item
-  end
-  structure TokenStream : sig
-    include STREAM
-    val fromList : item list -> stream
-  end
 end = struct
-  structure T = T
-  structure TE = TE
-  structure M = CP.M
-  structure CP = CP
-  open CP
+  structure T = MTSToken
+  structure TE = TErr
+  structure M = MTSCFP.M
+  open MTSCFP
   type t = T.t
-  type tok = CP.S.pos * t
+  type tok = TokenStream.item
   val whitespace = many space
   val keyword =
     many1 letter >>= (fn x =>
@@ -76,25 +63,5 @@ end = struct
     whitespace >>= (fn _ => return (p, x))))
   val tokenize =
     (many1 token >>= (fn ts => eoi >>= (fn _ => return ts)))
-  structure TokenVector : sig
-    include MONO_VECTOR
-    eqtype item
-  end = struct
-    open Vector
-    type vector = tok vector
-    type elem = tok
-    type item = tok
-  end
-  structure TokenStream : sig
-    include STREAM
-    val fromList : item list -> stream
-  end = struct
-    structure TS = MonoVectorStream (structure S = TokenVector;
-      val eq = (fn (x, y) => x = y);
-      val stringOfPos = (fn p => Int.toString p);
-      val stringOfElem = (fn (p, t) => T.stringOf t))
-    open TS
-    fun fromList l = { s = (TokenVector.fromList l), pos = 0 }
-  end
 end
 

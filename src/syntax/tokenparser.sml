@@ -1,7 +1,7 @@
 structure PErr = struct
   type err = unit
-  type pos = MTSTokenizer.TokenStream.pos
-  type elem = MTSTokenizer.TokenStream.item
+  type pos = TokenStream.pos
+  type elem = TokenStream.item
 end
 
 functor TokenParser (structure M : MONAD) : sig
@@ -46,7 +46,7 @@ functor TokenParser (structure M : MONAD) : sig
   val tokenEOI : unit monad
 end = struct
   structure TP = ParserT (
-    structure S = MTSTokenizer.TokenStream;
+    structure S = TokenStream;
     structure E = PErr;
     structure M = M)
   open TP

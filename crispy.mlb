@@ -1,26 +1,17 @@
 $(SML_LIB)/basis/basis.mlb
-common/common.sml
-common/set.sml
-common/monad.sml
-common/monadoption.sml
-common/monadstate.sml
-common/monadcont.sml
-common/monadreader.sml
-common/monadexception.sml
+common/common.mlb
+parsercombinator/pc.mlb
 
-parsercombinator/stream.sml
-parsercombinator/pc.sml
-parsercombinator/charparser.sml
-src/syntax/tokenizer.sml
+src/syntax/mtstoken.sml
+src/syntax/syntax.sml
 
 src/mts/mts.sml
 src/mts/subst.sml
 src/mts/alphaequiv.sml
 
-src/compilerm.sml
 src/mtscompilerm.sml
+src/syntax/tokenizer.sml
 
-src/syntax/mtstoken.sml
 src/syntax/tokenparser.sml
 src/syntax/syntaxparser.sml
 

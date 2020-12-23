@@ -14,6 +14,15 @@ signature COMPILERM = sig
   type freshName = int
   type pts = MTS.sorts * MTS.ax * MTS.rules
   type err = unit
+  type fileState = {
+    fileName : string,
+    syntaxTree : Syntax.toplvl list,
+    coreAst : MTS.toplvl list
+  }
+  type compilerState = {
+    files : fileState list,
+    toplevelEnv : unit list
+  }
 
   val getfvm : freshName monad
   val putfvm : freshName -> unit monad
@@ -29,9 +38,19 @@ structure MTSCompilerM : COMPILERM = struct
   type freshName = int
   type pts = MTS.sorts * MTS.ax * MTS.rules
   type err = unit
+  type fileState = {
+    fileName : string,
+    syntaxTree : Syntax.toplvl list,
+    coreAst : MTS.toplvl list
+  }
+  type compilerState = {
+    files : fileState list,
+    toplevelEnv : unit list
+  }
   val varOfInt = (fn i => MTS.GenVar i)
 
   structure FVM = StateFunctor (type s = freshName)
+  structure ST = StateFunctor (type s = compilerState)
   structure PTS = StateT (type s = pts; structure M = FVM)
   structure EXC = ExceptionT (type e = err; structure M = PTS)
   open EXC
@@ -43,4 +62,12 @@ structure MTSCompilerM : COMPILERM = struct
   val newvar = getfvm >>= (fn i => putfvm (i + 1) >>= (fn _ =>
     return (varOfInt i)))
 end
+
+structure TErr = struct
+  type err = unit
+  type pos = CharFileStream.pos
+  type elem = CharFileStream.item
+end
+
+structure MTSCFP = CharFileParser (structure E = TErr; structure M = MTSCompilerM)
 

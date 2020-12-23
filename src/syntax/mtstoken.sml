@@ -86,10 +86,3 @@ structure MTSToken = struct
     | EOI => "*EOI*")
 end
 
-structure MTSCFP = CharFileParser (structure E = TErr; structure M = MTSCompilerM)
-
-structure MTSTokenizer = Tokenizer (
-  structure T = MTSToken;
-  structure TE = TErr;
-  structure CP = MTSCFP)
-
