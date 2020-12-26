@@ -127,6 +127,14 @@ end = struct
     case x of MTSToken.EOI => return () | _ => zero ())
 end
 
-structure MTSTokenParser = TokenParser (structure M = MTSCompilerM)
+structure MTSTokenParser = struct
+  structure TP = TokenParser (structure M = MTSCompilerM)
+  open TP
+  fun getTokenStream n =
+    lift (PEXC.lift (PST.lift (MTSCompilerM.getTokenStream n)))
+  fun putSyntaxTree n synt =
+    lift (PEXC.lift (PST.lift (MTSCompilerM.putSyntaxTree n synt)))
+end
+
 structure MTSTokenParserUtil = MUtil (structure M = MTSTokenParser)
 

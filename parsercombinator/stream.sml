@@ -12,9 +12,9 @@ signature STREAM = sig
 end
 
 signature FILESTREAM = sig
-  include STREAM
+  include STREAM where type pos = int * int
   type rawStream
-  type rawPos
+  type rawPos = int
   val rawPosition : stream -> rawPos
 end
 
@@ -25,7 +25,7 @@ functor MonoVectorStream (
   end;
   val eq : S.item * S.item -> bool;
   val stringOfElem : S.item -> string
-) : STREAM =
+) : STREAM where type pos = int =
 struct
   type pos = int
   type stream = { s : S.vector, pos : pos }
@@ -70,6 +70,7 @@ end
 structure CharFileStream : sig
   include FILESTREAM
   structure CS : STREAM
+  val emptyStream : stream
   val fromString : string -> stream
 end = struct
   structure CS = CharVectorStream
@@ -101,6 +102,7 @@ end = struct
       else if c1 = c2 then 0
       else 1
     else 1
+  val emptyStream = ({ pos = (0, 0), s = CS.fromString "" })
   fun fromString s = ({ pos = (0, 0), s = CS.fromString s })
 end
 

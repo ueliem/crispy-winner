@@ -1,12 +1,11 @@
 structure SyntaxParser : sig
   include PARSER
-  structure M : MONAD
   structure TSP : PARSER
-  val binder : Syntax.var monad
+  val binder : MTS.var monad
   val ptsLiteral : Syntax.term monad
   val ptsSort : Syntax.term monad
-  val annotatedBinder : unit -> (Syntax.var * Syntax.term) monad
-  val binderList : unit -> (Syntax.var * Syntax.term) list monad
+  val annotatedBinder : unit -> (MTS.var * Syntax.term) monad
+  val binderList : unit -> (MTS.var * Syntax.term) list monad
   val path : unit -> Syntax.path monad
   val def : unit -> Syntax.def monad
   val specification : unit -> Syntax.specification monad
@@ -26,21 +25,23 @@ structure SyntaxParser : sig
   val modType : unit -> Syntax.modtype monad
   val modSig : unit -> Syntax.modtype monad
   val modFuncT : unit -> Syntax.modtype monad
+  val parseTopLevel : Syntax.toplvl list monad
+  val parseStream : string -> unit monad
 end = struct
   structure M = MTSCompilerM
   structure TSP = MTSTokenParser
   open TSP
   open MTSTokenParserUtil
-  val binder = (ident >>= (fn v => return (Syntax.NamedVar v)))
-    ++ (underscore >> return (Syntax.AnonVar))
-  val ptsLiteral = (kwInt >> return (Syntax.Lit (Syntax.IntTyLit)))
-    ++ (kwBool >> return (Syntax.Lit (Syntax.BoolTyLit)))
-    ++ (intLit >>= (fn i => return (Syntax.Lit (Syntax.IntLit i))))
-    ++ (boolLit >>= (fn b => return (Syntax.Lit (Syntax.BoolLit b))))
-  val ptsSort = (kwSet >> return (Syntax.Sort (Syntax.TypeVal)))
-    ++ (kwType >> return (Syntax.Sort (Syntax.KindVal)))
-    ++ (kwComp >> return (Syntax.Sort (Syntax.TypeComp)))
-    ++ (kwTrans >> return (Syntax.Sort (Syntax.KindComp)))
+  val binder = (ident >>= (fn v => return (MTS.NamedVar v)))
+    ++ (underscore >> return (MTS.AnonVar))
+  val ptsLiteral = (kwInt >> return (Syntax.Lit (MTS.IntTyLit)))
+    ++ (kwBool >> return (Syntax.Lit (MTS.BoolTyLit)))
+    ++ (intLit >>= (fn i => return (Syntax.Lit (MTS.IntLit i))))
+    ++ (boolLit >>= (fn b => return (Syntax.Lit (MTS.BoolLit b))))
+  val ptsSort = (kwSet >> return (Syntax.Sort (MTS.TypeVal)))
+    ++ (kwType >> return (Syntax.Sort (MTS.KindVal)))
+    ++ (kwComp >> return (Syntax.Sort (MTS.TypeComp)))
+    ++ (kwTrans >> return (Syntax.Sort (MTS.KindComp)))
   fun annotatedBinder () = lpar >> binder >>= (fn v => colon >>
     ptsTerm () >>= (fn t => rpar >> return (v, t)))
   and binderList () = many (annotatedBinder ())
@@ -138,5 +139,14 @@ end = struct
     modType () >>= (fn m1 => rpar >> rightarrow >>
     modType () >>= (fn m2 =>
     return (Syntax.ModTypeFunctor ([(v, m1)], m2)))))
+  val parseTopLevel =
+    many1 ((def () >>= (fn d => return (Syntax.TopDef d)))
+      ++ (specification () >>= (fn s => return (Syntax.TopSpec s))))
+  fun parseStream f =
+    getTokenStream f >>= (fn tvs =>
+    putstate tvs >>= (fn _ =>
+    parseTopLevel >>= (fn tl =>
+    putSyntaxTree f tl >>= (fn _ =>
+    return ()))))
 end
 

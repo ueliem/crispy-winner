@@ -9,10 +9,12 @@ signature PARSER = sig
   structure E : ERR
   type s = S.stream
   type e = E.err
+  structure M : MONAD
   structure PST : STATET
   structure PEXC : EXCEPTIONT
   structure POPT : OPTIONT
   include MONADZEROPLUS
+  val lift : 'a M.monad -> 'a monad
   val getstate : s monad
   val putstate : s -> unit monad
   val throw : e -> 'a monad
@@ -29,8 +31,7 @@ functor ParserT (structure S : STREAM;
   sharing type S.pos = E.pos;
   sharing type S.item = E.elem;
   structure M : MONAD) : sig
-    include PARSER
-    structure M : MONAD end = struct
+    include PARSER end = struct
   structure S = S
   structure E = E
   structure M = M

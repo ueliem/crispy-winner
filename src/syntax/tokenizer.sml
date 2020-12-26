@@ -1,28 +1,5 @@
-structure TokenVector : sig
-  type item = MTSCFP.S.pos * MTSToken.t
-  include MONO_VECTOR where type elem = item
-end = struct
-  open Vector
-  type item = MTSCFP.S.pos * MTSToken.t
-  type elem = item
-  type vector = item vector
-end
-
-structure TokenStream : sig
-  include STREAM where type item = TokenVector.item
-  val fromList : item list -> stream
-end = struct
-  structure TS = MonoVectorStream (structure S = TokenVector;
-    val eq = (fn (x, y) => x = y);
-    val stringOfPos = (fn p => Int.toString p);
-    val stringOfElem = (fn (p, t) => MTSToken.stringOf t))
-  open TS
-  fun fromList l = { s = (TokenVector.fromList l), pos = 0 }
-end
-
 structure MTSTokenizer : sig
   include CHARPARSER
-  structure M : MONAD
   type t = MTSToken.t
   type tok = TokenStream.item
   val whitespace : char list monad
@@ -34,10 +11,12 @@ structure MTSTokenizer : sig
   val rightpar : t monad
   val token : tok monad
   val tokenize : tok list monad
+  val tokenizeStream : string -> unit monad
+  (* val tokstr : string -> unit MTSCompilerM.monad *)
 end = struct
   structure T = MTSToken
   structure TE = TErr
-  structure M = MTSCFP.M
+  structure M = MTSCompilerM
   open MTSCFP
   type t = T.t
   type tok = TokenStream.item
@@ -63,5 +42,30 @@ end = struct
     whitespace >>= (fn _ => return (p, x))))
   val tokenize =
     (many1 token >>= (fn ts => eoi >>= (fn _ => return ts)))
+  fun tokenizeStream f =
+    getFileStream f >>= (fn cvs =>
+    putstate cvs >>= (fn _ =>
+    tokenize >>= (fn tl =>
+    putTokenStream f (TokenStream.fromList tl) >>= (fn _ =>
+    return ()))))
+  
+  (* fun tokstr f =
+    (op M.>>=
+      (tokenizeStream f,
+      (fn r => (case r of
+        (SOME ()) => MTSCompilerM.return ()
+      | NONE => MTSCompilerM.throw () ))))
+        (* { pos = (0, 0), s = { pos = 0, s = "" } } *)
+        *)
+
+    (*
+    * op M.>>= (getFileStream f, (fn cvs =>
+    op M.>>= (tokenize cvs, (fn (r, _) => (case r of
+      PEXC.ExcVal (SOME tl) =>
+        op M.>>= (putTokenStream f (TokenStream.fromList tl), (fn _ =>
+        M.return (TokenStream.fromList tl)))
+    | PEXC.ExcVal NONE => throw ()
+    | PEXC.ExcErr e => throw ())))))
+    *)
 end
 
