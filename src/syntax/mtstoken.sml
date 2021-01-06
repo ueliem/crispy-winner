@@ -16,7 +16,6 @@ structure MTSToken = struct
     | KWLet | KWIn | KWEnd
     | KWInt | KWBool | KWInductive
     | KWModule | KWVal
-    | EOI
   fun makeKeyword s = case s of
       "funcT" => SOME KWFuncT
     | "sig" => SOME KWSig
@@ -52,7 +51,7 @@ structure MTSToken = struct
   fun makeLPar () = LPar
   fun makeRPar () = RPar
   fun stringOf t = (case t of
-      Identifier s => s
+      Identifier s => "id:" ^ s
     | Integer i => Int.toString i
     | Boolean true => "true"
     | Boolean false => "false"
@@ -82,8 +81,7 @@ structure MTSToken = struct
     | KWBool => "bool"
     | KWInductive => "inductive"
     | KWModule => "module"
-    | KWVal => "val"
-    | EOI => "*EOI*")
+    | KWVal => "val")
 end
 
 structure TokenVector : sig

@@ -12,11 +12,13 @@ src/syntax/syntax.sml
 
 (* Compiler Core*)
 src/mtscompilerm.sml
+src/mtscfp.sml
 src/syntax/tokenizer.sml
 src/syntax/tokenparser.sml
 src/syntax/syntaxparser.sml
+
 (* Convert syntax to core goes here *)
-src/corefromsyntax.sml
+(* src/corefromsyntax.sml *)
 src/interp/interpmt.sml
 src/interp/interpm.sml
 src/interp/term.sml

@@ -1,5 +1,5 @@
-infixr 2 >>= >>
-infixr 1 ++
+infix 2 >>= >>
+infix 1 ++
 
 signature MONAD = sig
   type 'a monad
@@ -12,6 +12,10 @@ signature MONADZERO = sig
   val zero : unit -> 'a monad
 end
 
+signature MONADPLUS = sig
+  include MONAD
+  val ++ : 'a monad * 'a monad -> 'a monad
+end
 signature MONADZEROPLUS = sig
   include MONADZERO
   val ++ : 'a monad * 'a monad -> 'a monad

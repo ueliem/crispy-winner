@@ -1,0 +1,4 @@
+inductive nat : Set :=
+  | zero : nat
+  | succ : forall (_ : nat) => nat
+end

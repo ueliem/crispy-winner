@@ -1,6 +1,5 @@
 structure SyntaxParser : sig
   include PARSER
-  structure TSP : PARSER
   val binder : MTS.var monad
   val ptsLiteral : Syntax.term monad
   val ptsSort : Syntax.term monad
@@ -25,128 +24,150 @@ structure SyntaxParser : sig
   val modType : unit -> Syntax.modtype monad
   val modSig : unit -> Syntax.modtype monad
   val modFuncT : unit -> Syntax.modtype monad
-  val parseTopLevel : Syntax.toplvl list monad
+  val parseTopLevel : Syntax.def list monad
   val parseStream : string -> unit monad
 end = struct
   structure M = MTSCompilerM
-  structure TSP = MTSTokenParser
-  open TSP
+  open MTSTokenParser
   open MTSTokenParserUtil
-  val binder = (ident >>= (fn v => return (MTS.NamedVar v)))
-    ++ (underscore >> return (MTS.AnonVar))
-  val ptsLiteral = (kwInt >> return (Syntax.Lit (MTS.IntTyLit)))
-    ++ (kwBool >> return (Syntax.Lit (MTS.BoolTyLit)))
+
+  val binder = (* throwHere ([Err.Message "also on purpose"]) *)
+    (ident >>= (fn v => return (MTS.NamedVar v)))
+    ++ (underscore >>= (fn _ => return (MTS.AnonVar)))
+    ++ (throwHere [Err.Expected (Err.InfoMessage "binder")])
+  val ptsLiteral = (kwInt >>= (fn _ => return (Syntax.Lit (MTS.IntTyLit))))
+    ++ (kwBool >>= (fn _ => return (Syntax.Lit (MTS.BoolTyLit))))
     ++ (intLit >>= (fn i => return (Syntax.Lit (MTS.IntLit i))))
     ++ (boolLit >>= (fn b => return (Syntax.Lit (MTS.BoolLit b))))
-  val ptsSort = (kwSet >> return (Syntax.Sort (MTS.TypeVal)))
-    ++ (kwType >> return (Syntax.Sort (MTS.KindVal)))
-    ++ (kwComp >> return (Syntax.Sort (MTS.TypeComp)))
-    ++ (kwTrans >> return (Syntax.Sort (MTS.KindComp)))
-  fun annotatedBinder () = lpar >> binder >>= (fn v => colon >>
-    ptsTerm () >>= (fn t => rpar >> return (v, t)))
-  and binderList () = many (annotatedBinder ())
+    ++ (throwHere [Err.Expected (Err.InfoMessage "literal")])
+  val ptsSort = (kwSet >>= (fn _ => return (Syntax.Sort (MTS.TypeVal))))
+    ++ (kwType >>= (fn _ => return (Syntax.Sort (MTS.KindVal))))
+    ++ (kwComp >>= (fn _ => return (Syntax.Sort (MTS.TypeComp))))
+    ++ (kwTrans >>= (fn _ => return (Syntax.Sort (MTS.KindComp))))
+    ++ (throwHere [Err.Expected (Err.InfoMessage "sort")])
+  fun annotatedBinder () = lpar >>= (fn _ => binder >>= (fn v => colon >>= (fn _ =>
+    ptsTerm () >>= (fn t => rpar >>= (fn _ => return (v, t))))))
+  and binderList () = many1 (annotatedBinder ())
   and path () = (binder >>= (fn v =>
-    many (period >> binder) >>= (fn vs =>
+    many (period >>= (fn _ => binder)) >>= (fn vs =>
       return (v::vs))))
-  and def _ = (kwVal >> binder >>= (fn v => defined >>
-    ptsTerm () >>= (fn t => return (Syntax.DefTerm (v, t)))))
-    ++ (kwVal >> binder >>= (fn v => colon >>
-      ptsTerm () >>= (fn t1 => defined >> ptsTerm () >>= (fn t2 =>
-      return (Syntax.DefTermTyped (v, t1, t2))))))
-    ++ (kwModule >> binder >>= (fn v => defined >>
-      (kwTransparent >> modExpr () >>= (fn m =>
-        return (Syntax.DefModTransparent (v, m))))
-      ++ (modExpr () >>= (fn m1 => colon >> modType () >>= (fn m2 =>
-        return (Syntax.DefModSig (v, m1, m2)))))
-      ++ (modExpr () >>= (fn m => return (Syntax.DefMod (v, m))))))
-    ++ (kwInductive >> binder >>= (fn v => colon >>
-      ptsTerm () >>= (fn t => defined >>
-      many (pipe >> binder >>= (fn v' =>
-      colon >> ptsTerm () >>= (fn t' => return (v', t')))) >>= (fn dcl =>
-      kwEnd >> return (Syntax.DefInductive (v, t, dcl))))))
-    (* ++ (kwInductive >> binder >>= (fn v => colon >>
-      ptsTerm () >>= (fn t => defined >>
-      many (pipe >> binder >>= (fn v' =>
-      colon >> ptsTerm () >>= (fn t' => return (v', t')))) >>= (fn dcl =>
-      let val (vs, ts) = ListPair.unzip dcl in
-        return ((v, Syntax.DefVal (Syntax.Inductive ((v, t), ts)))
-          ::(List.tabulate (List.length dcl,
-            (fn i => (List.nth (vs, i), Syntax.DefVal
-              (Syntax.Constr (i, Syntax.Path (Syntax.PVar v))))))))end))))
-              *)
-  (* and specification _ =
-    (ptsTerm () >>= (fn t => return (Syntax.SpecAbsTerm t)))
-    ++ (ptsTerm () >>= (fn t1 => defined >> ptsTerm () >>= (fn t2 =>
-      return (Syntax.SpecManifestTerm (t1, t2)))))
-    ++ (modType () >>= (fn m => return (Syntax.SpecAbsMod m)))
-    ++ (modType () >>= (fn m1 => defined >> modExpr () >>= (fn m2 =>
-      return (Syntax.SpecManifestMod (m1, m2)))))
-      *)
-  and specification _ = (kwVal >> binder >>= (fn v => colon >>
-    ptsTerm () >>= (fn t => return (Syntax.SpecAbsTerm (v, t)))))
-    ++ (kwVal >> binder >>= (fn v => colon >>
-      ptsTerm () >>= (fn t1 => defined >> ptsTerm () >>= (fn t2 =>
-      return (Syntax.SpecManifestTerm (v, t1, t2))))))
-    ++ (kwModule >> binder >>= (fn v => defined >>
-      (modExpr () >>= (fn m1 => colon >> modType () >>= (fn m2 =>
-        return (Syntax.SpecManifestMod (v, m2, m1)))))
-      ++ (modType () >>= (fn m => return (Syntax.SpecAbsMod (v, m))))))
-    ++ (kwInductive >> binder >>= (fn v => colon >>
-      ptsTerm () >>= (fn t => defined >>
-      many (pipe >> binder >>= (fn v' =>
-      colon >> ptsTerm () >>= (fn t' => return (v', t')))) >>= (fn dcl =>
-      kwEnd >> return (Syntax.SpecInductive (v, t, dcl))))))
-  and ptsTerm () = ptsPath () ++ ptsLiteral ++ ptsSort
-    ++ ptsApp () ++ ptsCase () ++ ptsIfElse ()
+  and def _ =
+    (kwVal >>= (fn _ => binder >>= (fn v =>
+      (colon >>= (fn _ =>
+        ptsTerm () >>= (fn t1 => defined >>= (fn _ => ptsTerm () >>= (fn t2 =>
+          return (Syntax.DefTermTyped (v, t1, t2)))))))
+      ++ (defined >>= (fn _ => ptsTerm () >>= (fn t =>
+        return (Syntax.DefTerm (v, t))))))))
+    ++ (kwModule >>= (fn _ => binder >>= (fn v =>
+      (defined >>= (fn _ =>
+        (kwTransparent >>= (fn _ => modExpr () >>= (fn m =>
+          return (Syntax.DefModTransparent (v, m)))))
+        ++ (modExpr () >>= (fn m => return (Syntax.DefMod (v, m))))))
+
+      ++ (colon >>= (fn _ => modType () >>= (fn m2 =>
+        (defined >>= (fn _ => modExpr () >>= (fn m1 =>
+          return (Syntax.DefModSig (v, m1, m2)))))))))))
+    ++ (kwInductive >>= (fn _ => binder >>= (fn v =>
+      colon >>= (fn _ => ptsTerm () >>= (fn t => defined >>= (fn _ =>
+        many (pipe >>= (fn _ => binder >>= (fn v' =>
+          colon >>= (fn _ => ptsTerm () >>= (fn t' =>
+            return (v', t')))))) >>= (fn dcl =>
+      kwEnd >>= (fn _ => return (Syntax.DefInductive (v, t, dcl))))))))))
+    ++ throwHere ([Err.Message "def"])
+  and specification _ =
+    (kwVal >>= (fn _ => binder >>= (fn v => colon >>= (fn _ =>
+      ptsTerm () >>= (fn t1 =>
+        (defined >>= (fn _ => ptsTerm () >>= (fn t2 =>
+          return (Syntax.SpecManifestTerm (v, t1, t2)))))
+        ++ (return (Syntax.SpecAbsTerm (v, t1))))))))
+    ++ (kwModule >>= (fn _ => binder >>= (fn v => colon >>= (fn _ =>
+      modType () >>= (fn m1 =>
+        (defined >>= (fn _ => modExpr () >>= (fn m2 => 
+            return (Syntax.SpecManifestMod (v, m1, m2)))))
+        ++ (modType () >>= (fn m => return (Syntax.SpecAbsMod (v, m1)))))))))
+    ++ (kwInductive >>= (fn _ =>
+      binder >>= (fn v => colon >>= (fn _ =>
+      ptsTerm () >>= (fn t => defined >>= (fn _ =>
+      many (pipe >>= (fn _ => binder >>= (fn v' =>
+      colon >>= (fn _ => ptsTerm () >>= (fn t' => return (v', t')))))) >>= (fn dcl =>
+      kwEnd >>= (fn _ => return (Syntax.SpecInductive (v, t, dcl))))))))))
+    ++ throwHere ([Err.Message "spec"])
+  and ptsAtom () =
+    throwHere ([Err.Message "atom"])
+    ++ ptsSort ++ ptsLiteral
+    ++ ptsIfElse ()
     ++ ptsLet () ++ ptsLambda () ++ ptsDepProduct ()
-  and ptsPath () = path () >>= (fn p => return (Syntax.Path p))
-  and ptsApp () = ptsTerm () >>= (fn t1 => ptsTerm () >>= (fn t2 =>
-    return (Syntax.App (t1, t2))))
+    (* ++ ptsCase () *)
+    ++ ptsPath ()
+    ++ ptsParen ()
+  and ptsParen () =
+    throwHere ([Err.Message "paren atom"])
+    ++ (lpar >>= (fn _ => ptsTerm () >>= (fn t => rpar >>= (fn _ => return t))))
+  and ptsTerm () =
+    throwHere ([Err.Message "term"])
+    ++ ptsApp () 
+  and ptsPath () = (path () >>= (fn p => return (Syntax.Path p)))
+    ++ throwHere ([Err.Message "pts path"])
+  and ptsApp () =
+    (many1 (ptsAtom ()) >>= (fn t =>
+    if List.length t > 1 then 
+      return (Syntax.App (List.hd t, List.tl t))
+    else return (List.hd t)))
+    ++ throwHere ([Err.Message "app"])
   and ptsCase () = let fun ptsAlt _ =
     binder >>= (fn c => many binder >>= (fn vs =>
-    rightarrow >> ptsTerm () >>= (fn t' => return (c, vs, t'))))
-    in kwCase >> ptsTerm () >>= (fn t => kwOf >>
-      ptsAlt () >>= (fn x => many1 (pipe >> ptsAlt ()) >>= (fn xs =>
-      (* return (Syntax.Case (t, x::xs)) *) raise Fail ""))) end
-  and ptsIfElse () = kwIf >> ptsTerm () >>= (fn t1 =>
-    kwThen >> ptsTerm () >>= (fn t2 =>
-    kwElse >> ptsTerm () >>= (fn t3 =>
-    return (Syntax.IfElse (t1, t2, t3)))))
-  and ptsLet () = kwLet >> annotatedBinder () >>= (fn (v, t1) =>
-    defined >> ptsTerm () >>= (fn t2 =>
-    kwIn >> ptsTerm () >>= (fn t3 =>
-    kwEnd >> return (Syntax.Let (v, t1, t2, t3)))))
-  and ptsLambda () = kwFun >> binderList () >>= (fn vtl =>
-    rightarrow >> ptsTerm () >>= (fn t2 =>
-    return (Syntax.Lambda (vtl, t2))))
-  and ptsDepProduct () = kwForAll >> annotatedBinder () >>= (fn (v, t1) =>
-    rightarrow >> ptsTerm () >>= (fn t2 =>
-    return (Syntax.DepProduct ([(v, t1)], t2))))
+    rightarrow >>= (fn _ => ptsTerm () >>= (fn t' => return (c, vs, t')))))
+    in kwCase >>= (fn _ => ptsTerm () >>= (fn t => kwOf >>= (fn _ =>
+    ptsAlt () >>= (fn x => many1 (pipe >>= (fn _ => ptsAlt ())) >>= (fn xs =>
+      (* return (Syntax.Case (t, x::xs)) *) raise Fail ""))))) end
+  and ptsIfElse () = (kwIf >>= (fn _ => (ptsTerm () >>= (fn t1 =>
+    kwThen >>= (fn _ => (ptsTerm () >>= (fn t2 =>
+    kwElse >>= (fn _ => (ptsTerm () >>= (fn t3 =>
+    return (Syntax.IfElse (t1, t2, t3))))))))))))
+    ++ throwHere ([Err.Message "ifelse"])
+  and ptsLet () = (kwLet >>= (fn _ => annotatedBinder () >>= (fn (v, t1) =>
+    defined >>= (fn _ => ptsTerm () >>= (fn t2 =>
+    kwIn >>= (fn _ => ptsTerm () >>= (fn t3 =>
+    kwEnd >>= (fn _ => return (Syntax.Let (v, t1, t2, t3))))))))))
+    ++ throwHere ([Err.Message "let"])
+  and ptsLambda () = (kwFun >>= (fn _ => binderList () >>= (fn vtl =>
+    rightarrow >>= (fn _ => ptsTerm () >>= (fn t2 =>
+      return (Syntax.Lambda (vtl, t2)))))))
+    ++ throwHere ([Err.Message "lambda"])
+  and ptsDepProduct () = (kwForAll >>= (fn _ => annotatedBinder () >>= (fn (v, t1) =>
+    rightarrow >>= (fn _ => ptsTerm () >>= (fn t2 =>
+      return (Syntax.DepProduct ([(v, t1)], t2)))))))
+    ++ throwHere ([Err.Message "forall"])
   and modExpr _ =
     modStruct () ++ modFunctor () ++ modApp () ++ modPath ()
-  and modStruct _ = kwStruct >> many (def ()) >>= (fn vdl =>
-    kwEnd >> return (Syntax.ModStruct vdl))
-  and modFunctor _ = kwFunctor >> lpar >> binder >>= (fn v => colon >>
-    modType () >>= (fn m1 => rpar >> rightarrow >>
-    modExpr () >>= (fn m2 => return (Syntax.ModFunctor (v, m1, m2)))))
+    ++ throwHere ([Err.Message "mod expr"])
+  and modStruct _ = kwStruct >>= (fn _ => many (def ()) >>= (fn vdl =>
+    kwEnd >>= (fn _ => return (Syntax.ModStruct vdl))))
+  and modFunctor _ = kwFunctor >>= (fn _ =>
+    lpar >>= (fn _ => binder >>= (fn v => colon >>= (fn _ =>
+      modType () >>= (fn m1 => rpar >>= (fn _ => rightarrow >>= (fn _ =>
+      modExpr () >>= (fn m2 => return (Syntax.ModFunctor (v, m1, m2))))))))))
   and modApp _ = modExpr () >>= (fn m1 => modExpr () >>= (fn m2 =>
     return (Syntax.ModApp (m1, m2))))
   and modPath _ = path () >>= (fn p => return (Syntax.ModPath p))
-  and modType _ = modSig () ++ modFuncT ()
-  and modSig _ = kwSig >> many (specification ()) >>= (fn vsl =>
-    kwEnd >> return (Syntax.ModTypeSig vsl))
-  and modFuncT _ = kwFuncT >> lpar >> binder >>= (fn v => colon >>
-    modType () >>= (fn m1 => rpar >> rightarrow >>
-    modType () >>= (fn m2 =>
-    return (Syntax.ModTypeFunctor ([(v, m1)], m2)))))
-  val parseTopLevel =
-    many1 ((def () >>= (fn d => return (Syntax.TopDef d)))
-      ++ (specification () >>= (fn s => return (Syntax.TopSpec s))))
+  and modType _ =
+    modSig () ++ modFuncT () (* ++ throwHere ([Err.Message "modtype"]) *)
+  and modSig _ = kwSig >>= (fn _ => many (specification ()) >>= (fn vsl =>
+    kwEnd >>= (fn _ => return (Syntax.ModTypeSig vsl))))
+  and modFuncT _ = kwFuncT >>= (fn _ =>
+    lpar >>= (fn _ => binder >>= (fn v => colon >>= (fn _ =>
+      modType () >>= (fn m1 => rpar >>= (fn _ => rightarrow >>= (fn _ =>
+      modType () >>= (fn m2 =>
+        return (Syntax.ModTypeFunctor ([(v, m1)], m2))))))))))
+  val parseTopLevel = (* throwHere ([Err.Message "on purpose"]) *)
+    (def ()) >>= (fn tl => endOfInput >>= (fn _ => return [tl]))
   fun parseStream f =
-    getTokenStream f >>= (fn tvs =>
+    catch (getTokenStream f >>= (fn tvs =>
     putstate tvs >>= (fn _ =>
     parseTopLevel >>= (fn tl =>
     putSyntaxTree f tl >>= (fn _ =>
-    return ()))))
+    return ())))), (fn (p, rs) =>
+      printMsg (String.concat ["Errors at ", S.stringOfPos p, "\n"]) >>= (fn _ =>
+      printMsg (Err.stringOfErrors rs))))
 end
 

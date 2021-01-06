@@ -31,6 +31,7 @@ sig
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
+  | Fix of var * term * term
   | Inductive of (var * term) * term list
   | Constr of int * term
   and def =
@@ -97,6 +98,7 @@ struct
   | Let of var * term * term * term
   | Lambda of var * term * term
   | DepProduct of var * term * term
+  | Fix of var * term * term
   | Inductive of (var * term) * term list
   | Constr of int * term
   and def =

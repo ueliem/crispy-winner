@@ -8,7 +8,7 @@ structure Syntax = struct
     Path of path
   | Lit of lit
   | Sort of sort
-  | App of term * term
+  | App of term * term list
   | Case of term * term * (path * var list * term) list
   | IfElse of term * term * term
   | Let of var * term * term * term
@@ -35,8 +35,5 @@ structure Syntax = struct
   | ModFunctor of var * modtype * modexpr
   | ModApp of modexpr * modexpr
   | ModPath of path
-  and toplvl =
-    TopSpec of specification
-  | TopDef of def
-  type program = (var * toplvl) list
+  type program = def list
 end
