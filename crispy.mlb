@@ -8,11 +8,13 @@ src/mts/mts.sml
 src/mts/subst.sml
 src/mts/alphaequiv.sml
 src/syntax/mtstoken.sml
+src/syntax/tokenvector.sml
+src/syntax/tokenstream.sml
 src/syntax/syntax.sml
 
 (* Compiler Core*)
 src/mtscompilerm.sml
-src/mtscfp.sml
+src/syntax/mtscfp.sml
 src/syntax/tokenizer.sml
 src/syntax/tokenparser.sml
 src/syntax/syntaxparser.sml

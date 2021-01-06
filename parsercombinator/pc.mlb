@@ -1,5 +1,8 @@
 $(SML_LIB)/basis/basis.mlb
 ../common/common.mlb
 stream.sml
+charvectorstream.sml
+charfilestream.sml
+parsererr.sml
 pc.sml
 charparser.sml

@@ -13,7 +13,6 @@ structure MTSTokenizer : sig
   val tokenizeStream : string -> unit monad
 end = struct
   structure T = MTSToken
-  structure M = MTSCompilerM
   open MTSCFP
   type t = T.t
   type tok = TokenStream.item
