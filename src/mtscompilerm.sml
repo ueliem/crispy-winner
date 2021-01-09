@@ -135,3 +135,5 @@ structure MTSCompilerM : COMPILERM = struct
           syntaxTree = synt, coreAst = ast @ tll }))
 end
 
+structure MTSCompilerMUtil = MUtil (structure M = MTSCompilerM)
+

@@ -57,5 +57,6 @@ functor ParserErrT (type e; structure S : STREAM) : PARSERERR = struct
         Message s => String.concat ["Message: ", s]
       | Expected e => String.concat ["Expected: ", stringOfInfo e]
       | Unexpected e => String.concat ["Unxpected: ", stringOfInfo e]
+      | Other _ => raise Fail "not iplemented"
       ) ^ "\n" ^ (stringOfErrors rs)
 end

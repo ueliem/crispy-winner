@@ -1,34 +1,40 @@
-(* Libraries *)
-$(SML_LIB)/basis/basis.mlb
-common/common.mlb
-parsercombinator/pc.mlb
-
-(* Languages *)
-src/mts/mts.sml
-src/mts/subst.sml
-src/mts/alphaequiv.sml
-src/syntax/mtstoken.sml
-src/syntax/tokenvector.sml
-src/syntax/tokenstream.sml
-src/syntax/syntax.sml
-
-(* Compiler Core*)
-src/mtscompilerm.sml
-src/syntax/mtscfp.sml
-src/syntax/tokenizer.sml
-src/syntax/tokenparser.sml
-src/syntax/syntaxparser.sml
-
-(* Convert syntax to core goes here *)
-(* src/corefromsyntax.sml *)
-src/interp/interpmt.sml
-src/interp/interpm.sml
-src/interp/term.sml
-src/interp/pseudotype.sml
-src/interp/normalize.sml
-src/interp/check.sml
-
-(* Main *)
-src/compiler.sml
-src/main.sml
-
+ann
+  "nonexhaustiveBind warn" "nonexhaustiveMatch warn"
+  "redundantBind warn" "redundantMatch warn"
+  "sequenceNonUnit warn" (* "warnUnused true" *)
+  "allowRecordPunExps true"
+in
+  (* Libraries *)
+  $(SML_LIB)/basis/basis.mlb
+  common/common.mlb
+  parsercombinator/pc.mlb
+  
+  (* Languages *)
+  src/mts/mts.sml
+  src/mts/subst.sml
+  src/mts/alphaequiv.sml
+  src/syntax/mtstoken.sml
+  src/syntax/tokenvector.sml
+  src/syntax/tokenstream.sml
+  src/syntax/syntax.sml
+  
+  (* Compiler Core*)
+  src/mtscompilerm.sml
+  src/syntax/mtscfp.sml
+  src/syntax/tokenizer.sml
+  src/syntax/tokenparser.sml
+  src/syntax/syntaxparser.sml
+  
+  (* Convert syntax to core goes here *)
+  src/corefromsyntax.sml
+  src/interp/interpmt.sml
+  src/interp/interpm.sml
+  src/interp/term.sml
+  src/interp/pseudotype.sml
+  src/interp/normalize.sml
+  src/interp/check.sml
+  
+  (* Main *)
+  src/compiler.sml
+  src/main.sml
+end

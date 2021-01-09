@@ -148,6 +148,8 @@ struct
         Set.remove v (Set.union (fvTerm t1) (fvTerm t2))
     | fvTerm (DepProduct (v, t1, t2)) =
         Set.remove v (Set.union (fvTerm t1) (fvTerm t2))
+    | fvTerm (Fix (v, t1, t2)) =
+        Set.remove v (Set.union (fvTerm t1) (fvTerm t2))
     | fvTerm (Inductive ((v, t1), tl)) =
         Set.union (fvTerm t1) (foldl (fn (t', s) =>
           Set.union s (fvTerm t')) Set.emptyset tl)

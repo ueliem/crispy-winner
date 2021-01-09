@@ -39,6 +39,13 @@ struct
   | eq (DepProduct (v, m1, m2)) (DepProduct (v', m1', m2')) =
       if eqv v v' then eq m1 m1' andalso eq m2 m2'
       else eq m1 m1' andalso eq m2 (TSub.substTerm v' (Path (PVar v)) m2')
+  | eq (Fix (AnonVar, m1, m2)) (Fix (_, m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
+  | eq (Fix (_, m1, m2)) (Fix (AnonVar, m1', m2')) =
+      eq m1 m1' andalso eq m2 m2'
+  | eq (Fix (v, m1, m2)) (Fix (v', m1', m2')) =
+      if eqv v v' then eq m1 m1' andalso eq m2 m2'
+      else eq m1 m1' andalso eq m2 (TSub.substTerm v' (Path (PVar v)) m2')
   | eq _ _ = false
   and mexpreq (ModStruct ml) (ModStruct ml') =
       foldl (fn (((v, d), (v', d')), x) => 

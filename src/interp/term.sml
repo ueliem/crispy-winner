@@ -49,6 +49,7 @@ end = struct
     | arity (Let _) = throw ()
     | arity (Lambda _) = throw ()
     | arity (DepProduct (v, t1, t2)) = arity t2
+    | arity (Fix _) = throw ()
     | arity (Inductive _) = throw ()
     | arity (Constr _) = throw ()
   fun strictlyPositive c (Path (PVar v)) = 
@@ -66,6 +67,7 @@ end = struct
     | strictlyPositive c (DepProduct (v, t1, t2)) =
       strictlyPositive c t2 >>
       (if Set.member c (fvTerm t1) then throw () else return ())
+    | strictlyPositive c (Fix _) = throw ()
     | strictlyPositive c (Inductive _) = throw ()
     | strictlyPositive c (Constr _) = throw ()
   fun constructorForm c (Path (PVar v)) = 
@@ -88,6 +90,7 @@ end = struct
         (if Set.member c (fvTerm t1) then throw ()
         else return ())
       else constructorForm c t2 >> strictlyPositive c t1)
+    | constructorForm c (Fix _) = throw ()
     | constructorForm c (Inductive _) = throw ()
     | constructorForm c (Constr _) = throw ()
   fun sigbodyContains v sl =

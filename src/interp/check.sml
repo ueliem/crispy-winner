@@ -232,7 +232,7 @@ struct
       return (TSub.substTerm v t' (List.nth (tl, i))))))
   and whptTerm t =
     ptTerm t >>= (fn t' => Normalize.termreduce 
-      Normalize.WeakHeadNormalForm t' >>= (fn t'' => return t''))
+      Normalize.weakHeadNormalFormStrat t' >>= (fn t'' => return t''))
 
   and lrsub x i q r' c =
     let fun f r (DepProduct (AnonVar, m1, m2)) =

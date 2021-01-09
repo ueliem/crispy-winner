@@ -1,8 +1,19 @@
 structure Normalize : sig
-  datatype strategy =
-    WeakHeadNormalForm
-  | StrongNormalForm
-  | NormalForm
+  type strategy = {
+    inside : bool, args : bool, beta : bool, betaMod : bool,
+    rho : bool, delta : bool, iota : bool, fix : bool }
+  val shouldReduceUnderAbs : strategy -> bool
+  val shouldReduceArgs : strategy -> bool
+  val shouldBetaReduce : strategy -> bool
+  val shouldBetaModReduce : strategy -> bool
+  val shouldFieldSelect : strategy -> bool
+  val shouldManifestFieldReduce : strategy -> bool
+  val shouldMatchOnConstr : strategy -> bool
+  val shouldFixReduce : strategy -> bool
+  val normalFormStrat : strategy 
+  val weakNormalFormStrat : strategy 
+  val headNormalFormStrat : strategy 
+  val weakHeadNormalFormStrat : strategy 
   type 'a monad = 'a MTSInterpM.monad
   val pathstep : strategy -> MTS.path -> MTS.path monad
   val termstep : strategy -> MTS.term -> MTS.term monad
@@ -12,10 +23,37 @@ structure Normalize : sig
   val bequiv : MTS.term -> MTS.term -> unit monad
   val mequiv : MTS.modexpr -> MTS.modexpr -> unit monad
 end = struct
-  datatype strategy =
-    WeakHeadNormalForm
-  | StrongNormalForm
-  | NormalForm
+  type strategy = {
+    inside : bool, args : bool, beta : bool, betaMod : bool,
+    rho : bool, delta : bool, iota : bool, fix : bool }
+  fun shouldReduceUnderAbs ({ inside, args, beta, betaMod,
+                              rho, delta, iota, fix }) = inside
+  fun shouldReduceArgs ({ inside, args, beta, betaMod,
+                          rho, delta, iota, fix }) = args
+  fun shouldBetaReduce ({ inside, args, beta, betaMod,
+                          rho, delta, iota, fix }) = beta
+  fun shouldBetaModReduce ({ inside, args, beta, betaMod,
+                             rho, delta, iota, fix }) = betaMod
+  fun shouldFieldSelect ({ inside, args, beta, betaMod,
+                           rho, delta, iota, fix }) = rho
+  fun shouldManifestFieldReduce ({ inside, args, beta, betaMod,
+                                   rho, delta, iota, fix }) = delta
+  fun shouldMatchOnConstr ({ inside, args, beta, betaMod,
+                             rho, delta, iota, fix }) = iota
+  fun shouldFixReduce ({ inside, args, beta, betaMod,
+                         rho, delta, iota, fix }) = fix
+  val normalFormStrat = {
+    inside = true, args = true, beta = true, betaMod = true,
+    rho = true, delta = true, iota = true, fix = false }
+  val weakNormalFormStrat = {
+    inside = false, args = true, beta = true, betaMod = true,
+    rho = true, delta = true, iota = true, fix = false }
+  val headNormalFormStrat = {
+    inside = true, args = false, beta = true, betaMod = true,
+    rho = true, delta = true, iota = true, fix = false }
+  val weakHeadNormalFormStrat = {
+    inside = false, args = false, beta = true, betaMod = true,
+    rho = true, delta = true, iota = true, fix = false }
   type 'a monad = 'a MTSInterpM.monad
   open MTS
   open MTSInterpM
@@ -71,13 +109,13 @@ end = struct
   fun mexprreduce str m =
     (mexprstep str m >>= (fn m' => mexprreduce str m')) ++ return m
   fun bequiv m1 m2 =
-    termreduce NormalForm m1 >>= (fn m1' =>
-    termreduce NormalForm m2 >>= (fn m2' =>
+    termreduce normalFormStrat m1 >>= (fn m1' =>
+    termreduce normalFormStrat m2 >>= (fn m2' =>
       if Equiv.eq m1' m2' then return ()
       else throw ()))
   fun mequiv m1 m2 =
-    mexprreduce NormalForm m1 >>= (fn m1' =>
-    mexprreduce NormalForm m2 >>= (fn m2' =>
+    mexprreduce normalFormStrat m1 >>= (fn m1' =>
+    mexprreduce normalFormStrat m2 >>= (fn m2' =>
       if Equiv.mexpreq m1' m2' then return ()
       else throw ()))
 end

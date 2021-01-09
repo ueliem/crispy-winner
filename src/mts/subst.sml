@@ -37,6 +37,9 @@ struct
     | substTerm x x' (DepProduct (v, m1, m2)) =
       if eqv x v then DepProduct (v, m1, m2)
       else DepProduct (v, substTerm x x' m1, substTerm x x' m2)
+    | substTerm x x' (Fix (v, m1, m2)) =
+      if eqv x v then Fix (v, m1, m2)
+      else Fix (v, substTerm x x' m1, substTerm x x' m2)
     | substTerm x x' (Inductive ((v, t), tl)) =
       if eqv x v then Inductive ((v, t), tl)
       else Inductive ((v, substTerm x x' t), map (substTerm x x') tl)
