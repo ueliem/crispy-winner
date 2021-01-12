@@ -15,7 +15,7 @@ structure MTSToken = struct
     | KWIf | KWThen | KWElse
     | KWLet | KWIn | KWEnd
     | KWInt | KWBool | KWInductive
-    | KWModule | KWVal
+    | KWFixpoint | KWModule | KWVal
   fun makeKeyword s = case s of
       "funcT" => SOME KWFuncT
     | "sig" => SOME KWSig
@@ -41,6 +41,7 @@ structure MTSToken = struct
     | "true" => SOME (Boolean true)
     | "false" => SOME (Boolean false)
     | "inductive" => SOME (KWInductive)
+    | "fixpoint" => SOME (KWFixpoint)
     | "module" => SOME (KWModule)
     | "val" => SOME (KWVal)
     | _ => NONE
@@ -80,6 +81,7 @@ structure MTSToken = struct
     | KWInt => "int"
     | KWBool => "bool"
     | KWInductive => "inductive"
+    | KWFixpoint => "fixpoint"
     | KWModule => "module"
     | KWVal => "val")
 end

@@ -31,8 +31,7 @@ end = struct
   open MTSTokenParser
   open MTSTokenParserUtil
 
-  val binder = (* throwHere ([Err.Message "also on purpose"]) *)
-    (ident >>= (fn v => return (MTS.NamedVar v)))
+  val binder = (ident >>= (fn v => return (MTS.NamedVar v)))
     ++ (underscore >>= (fn _ => return (MTS.AnonVar)))
     ++ (throwHere [Err.Expected (Err.InfoMessage "binder")])
   val ptsLiteral = (kwInt >>= (fn _ => return (Syntax.Lit (MTS.IntTyLit))))
@@ -63,16 +62,14 @@ end = struct
         (kwTransparent >>= (fn _ => modExpr () >>= (fn m =>
           return (Syntax.DefModTransparent (v, m)))))
         ++ (modExpr () >>= (fn m => return (Syntax.DefMod (v, m))))))
-
       ++ (colon >>= (fn _ => modType () >>= (fn m2 =>
         (defined >>= (fn _ => modExpr () >>= (fn m1 =>
           return (Syntax.DefModSig (v, m1, m2)))))))))))
-    ++ (kwInductive >>= (fn _ => binder >>= (fn v =>
-      colon >>= (fn _ => ptsTerm () >>= (fn t => defined >>= (fn _ =>
-        many (pipe >>= (fn _ => binder >>= (fn v' =>
-          colon >>= (fn _ => ptsTerm () >>= (fn t' =>
-            return (v', t')))))) >>= (fn dcl =>
-      kwEnd >>= (fn _ => return (Syntax.DefInductive (v, t, dcl))))))))))
+    ++ (inductive () >>= (fn (v, t, dcl) =>
+      return (Syntax.DefInductive (v, t, dcl))))
+    ++ (kwFixpoint >>= (fn _ => annotatedBinder () >>= (fn (v, t1) =>
+      defined >>= (fn _ => ptsTerm () >>= (fn t2 =>
+        return (Syntax.DefFixpoint (v, t1, t2)))))))
     ++ throwHere ([Err.Message "def"])
   and specification _ =
     (kwVal >>= (fn _ => binder >>= (fn v => colon >>= (fn _ =>
@@ -85,21 +82,21 @@ end = struct
         (defined >>= (fn _ => modExpr () >>= (fn m2 => 
             return (Syntax.SpecManifestMod (v, m1, m2)))))
         ++ (modType () >>= (fn m => return (Syntax.SpecAbsMod (v, m1)))))))))
-    ++ (kwInductive >>= (fn _ =>
-      binder >>= (fn v => colon >>= (fn _ =>
-      ptsTerm () >>= (fn t => defined >>= (fn _ =>
-      many (pipe >>= (fn _ => binder >>= (fn v' =>
-      colon >>= (fn _ => ptsTerm () >>= (fn t' => return (v', t')))))) >>= (fn dcl =>
-      kwEnd >>= (fn _ => return (Syntax.SpecInductive (v, t, dcl))))))))))
+    ++ (inductive () >>= (fn (v, t, dcl) =>
+      return (Syntax.SpecInductive (v, t, dcl))))
     ++ throwHere ([Err.Message "spec"])
+  and inductive () =
+    (kwInductive >>= (fn _ => binder >>= (fn v =>
+      colon >>= (fn _ => ptsTerm () >>= (fn t => defined >>= (fn _ =>
+        many (pipe >>= (fn _ => binder >>= (fn v' =>
+          colon >>= (fn _ => ptsTerm () >>= (fn t' =>
+            return (v', t')))))) >>= (fn dcl =>
+      kwEnd >>= (fn _ => return (v, t, dcl)))))))))
   and ptsAtom () =
     throwHere ([Err.Message "atom"])
-    ++ ptsSort ++ ptsLiteral
-    ++ ptsIfElse ()
+    ++ ptsSort ++ ptsLiteral ++ ptsParen ()
     ++ ptsLet () ++ ptsLambda () ++ ptsDepProduct ()
-    (* ++ ptsCase () *)
-    ++ ptsPath ()
-    ++ ptsParen ()
+    ++ ptsIfElse () ++ ptsCase () ++ ptsPath ()
   and ptsParen () =
     throwHere ([Err.Message "paren atom"])
     ++ (lpar >>= (fn _ => ptsTerm () >>= (fn t => rpar >>= (fn _ => return t))))
@@ -115,11 +112,12 @@ end = struct
     else return (List.hd t)))
     ++ throwHere ([Err.Message "app"])
   and ptsCase () = let fun ptsAlt _ =
-    binder >>= (fn c => many binder >>= (fn vs =>
+    path () >>= (fn c => many binder >>= (fn vs =>
     rightarrow >>= (fn _ => ptsTerm () >>= (fn t' => return (c, vs, t')))))
-    in kwCase >>= (fn _ => ptsTerm () >>= (fn t => kwOf >>= (fn _ =>
-    ptsAlt () >>= (fn x => many1 (pipe >>= (fn _ => ptsAlt ())) >>= (fn xs =>
-      (* return (Syntax.Case (t, x::xs)) *) raise Fail ""))))) end
+    in kwCase >>= (fn _ => ptsTerm () >>= (fn t1 => kwIn>>= (fn _ =>
+      ptsTerm () >>= (fn t2 => kwOf >>= (fn _ =>
+      many1 (pipe >>= (fn _ => ptsAlt ())) >>= (fn xs =>
+      kwEnd >>= (fn _ => return (Syntax.Case (t1, t2, xs))))))))) end
   and ptsIfElse () = (kwIf >>= (fn _ => (ptsTerm () >>= (fn t1 =>
     kwThen >>= (fn _ => (ptsTerm () >>= (fn t2 =>
     kwElse >>= (fn _ => (ptsTerm () >>= (fn t3 =>

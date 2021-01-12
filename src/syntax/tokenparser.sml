@@ -37,6 +37,7 @@ structure MTSTokenParser : sig
   val kwInt : elem monad
   val kwBool : elem monad
   val kwInductive : elem monad
+  val kwFixpoint : elem monad
   val kwModule : elem monad
   val kwVal : elem monad
 end = struct
@@ -130,6 +131,8 @@ end = struct
     ++ expectedKeyword "bool"
   val kwInductive = satisfies (fn (p, x) => x = MTSToken.KWInductive)
     ++ expectedKeyword "inductive"
+  val kwFixpoint = satisfies (fn (p, x) => x = MTSToken.KWFixpoint)
+    ++ expectedKeyword "fixpoint"
   val kwModule = satisfies (fn (p, x) => x = MTSToken.KWModule)
     ++ expectedKeyword "module"
   val kwVal = satisfies (fn (p, x) => x = MTSToken.KWVal)

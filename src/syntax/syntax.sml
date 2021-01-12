@@ -21,6 +21,7 @@ structure Syntax = struct
   | DefModSig of var * modexpr * modtype
   | DefModTransparent of var * modexpr
   | DefInductive of var * term * (var * term) list
+  | DefFixpoint of var * term * term
   and modtype =
     ModTypeSig of specification list
   | ModTypeFunctor of (var * modtype) list * modtype
